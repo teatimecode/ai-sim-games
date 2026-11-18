@@ -6,7 +6,7 @@
   "scope": "6 城区、27 房间；19 个可玩、8 个仅讲解",
   "automated": {
     "command": "node tests/check.js",
-    "result": "passed: 549  failed: 0",
+    "result": "passed: 550  failed: 0",
     "covers": [
       "房间与教程卡完整性（每间都有标题、要点、原文引用与出处）",
       "对位四关回溯求解均有解，示范解法与判定一致",
@@ -118,7 +118,9 @@
     "「体态」三个色块只设背景没写文字，显示为空；改为颜色与文字分开判断，符号项直接画小印。",
     "调性罗盘的分发分支漏加，房间落到「仅讲解」；补上 kind === compass。",
     "首次进入被定制面板挡住：改为自动生成随机化身并直接显示身份卡，定制降为次要入口。",
-    "avatarConfirmed 不再作为进入条件，旧存档不会被重新挡回定制页。"
+    "avatarConfirmed 不再作为进入条件，旧存档不会被重新挡回定制页。",
+    "节奏房提交提示只看「是否铺满」，两小节都满但跨组界时仍显示可以提交；改为以判定结果为准。",
+    "最后一个城区选完校记后直接回地图，终局不再触发；校记选择后补一次结局检查。"
   ],
   "notVerified": [
     "音色与音量平衡未经人耳复核，仅有信号级证据（峰值 0.155、RMS 0.049，非静音）。",
@@ -191,101 +193,106 @@
     }
   ],
   "matrix": {
-    "method": "浏览器内脚本按每间的标准答案逐间操作并提交，读取判定标题与存档 cleared 后记录；15 间顺序执行，最后触发终页并完成署名。",
-    "result": "15 / 15 通过",
+    "method": "浏览器内脚本按每间标准答案逐间操作并提交，读判定与存档 cleared；19 间顺序执行。",
+    "result": "19 / 19 cleared，六区 seals 全 true",
     "rooms": [
       {
         "room": "r-c-major",
-        "title": "十二块石头 · C 大调",
-        "verdict": "校毕",
+        "kind": "scale",
+        "cleared": true
+      },
+      {
+        "room": "r-meter",
+        "kind": "rhythm",
         "cleared": true
       },
       {
         "room": "r-g-major",
-        "title": "升号从哪来 · G 大调",
-        "verdict": "校毕",
+        "kind": "scale",
+        "cleared": true
+      },
+      {
+        "room": "r-meter2",
+        "kind": "rhythm",
         "cleared": true
       },
       {
         "room": "r-d-dorian",
-        "title": "同一组石头，两种城 · d 多利亚",
-        "verdict": "校毕",
+        "kind": "scale",
         "cleared": true
       },
       {
         "room": "r-cp1",
-        "title": "一对一开始 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-cp2",
-        "title": "小调与导音 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-cp3",
-        "title": "写在下方 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-cp4",
-        "title": "二对一 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-func",
-        "title": "功能的方向 · 已平",
-        "verdict": "账平",
+        "kind": "harmony",
         "cleared": true
       },
       {
         "room": "r-debt",
-        "title": "欠账必还 · 已平",
-        "verdict": "账平",
+        "kind": "harmony",
+        "cleared": true
+      },
+      {
+        "room": "r-compass1",
+        "kind": "compass",
+        "cleared": true
+      },
+      {
+        "room": "r-compass2",
+        "kind": "compass",
         "cleared": true
       },
       {
         "room": "r-theme",
-        "title": "主题的两半 · 蓝图对上了",
-        "verdict": "校毕",
+        "kind": "form",
         "cleared": true
       },
       {
         "room": "r-sonata",
-        "title": "呈示部的两个调 · 蓝图对上了",
-        "verdict": "校毕",
+        "kind": "form",
         "cleared": true
       },
       {
         "room": "r-rondo",
-        "title": "叠句回来了几次 · 蓝图对上了",
-        "verdict": "校毕",
+        "kind": "form",
         "cleared": true
       },
       {
         "room": "r-normal",
-        "title": "最紧排列 · 跨度 8",
-        "verdict": "测毕",
+        "kind": "set",
         "cleared": true
       },
       {
         "room": "r-common",
-        "title": "共同音 · 共同音 2 个",
-        "verdict": "测毕",
+        "kind": "set",
         "cleared": true
       },
       {
         "room": "r-doowop",
-        "title": "循环续写 · 一圈",
-        "verdict": "接上了",
+        "kind": "pop",
         "cleared": true
       }
     ],
-    "ending": "全部通过后 cleared=15、六个城区 seals 全为 true，终页出现并带署名输入框；签名后 signed 写入。"
+    "note": "个别关卡结算后紧跟城区「校记」弹层，日志里该条记录的标题取到了校记而非房间标题；存档 cleared 仍为 true，房间本身已通关。"
   },
   "viewport": {
     "checked": [

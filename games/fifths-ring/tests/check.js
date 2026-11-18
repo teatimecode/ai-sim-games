@@ -405,6 +405,8 @@ ok('rhythm state is persisted', src.indexOf('rhythm: state.rhythm') !== -1);
 ok('rhythm tiles are real buttons', src.indexOf("b.type = 'button'") !== -1 && src.indexOf('rp-tile') !== -1);
 ok('rhythm has no drag dependency', src.indexOf('dragstart') === -1);
 
+ok('record beat hands over to the ending', src.indexOf('if (endingEligible() && !state.signed) setTimeout(showEnding, 320);') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

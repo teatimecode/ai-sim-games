@@ -2616,13 +2616,9 @@ function showRecordBeat(did) {
     actions.appendChild(mkBtn(o.key, 'btn', function () {
       state.records[did] = { choice: o.key, finalized: true };
       saveState();
-      if (state.signed) {
-        hideVerdict();
-        renderMap();
-      } else {
-        hideVerdict();
-        renderMap();
-      }
+      hideVerdict();
+      renderMap();
+      if (endingEligible() && !state.signed) setTimeout(showEnding, 320);
     }));
   });
 
