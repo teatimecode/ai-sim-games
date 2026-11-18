@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>适航 · 北辰航空 P-19 项目</title>
+<link rel="stylesheet" href="game.css?v=3">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="planeout">
+      <rect x="-13" y="-85" width="26" height="170" rx="13" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <path d="M 8 -16 L 78 26 L 78 34 L 8 6 Z" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <path d="M -8 -16 L -78 26 L -78 34 L -8 6 Z" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <rect x="40" y="8" width="15" height="34" rx="7.5" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <rect x="-55" y="8" width="15" height="34" rx="7.5" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <path d="M 6 66 L 34 84 L 34 89 L 6 76 Z" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <path d="M -6 66 L -34 84 L -34 89 L -6 76 Z" fill="none" stroke="#16222B" stroke-width="1.2"/>
+      <rect x="-1.6" y="62" width="3.2" height="26" fill="none" stroke="#16222B" stroke-width="1"/>
+    </g>
+    <clipPath id="fusclip"><rect x="-13" y="-85" width="26" height="170" rx="13"/></clipPath>
+  </defs>
+</svg>
+
+<div class="app">
+  <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
+
+  <div class="hud"></div>
+
+  <div class="main">
+    <div class="col-left">
+      <section class="card line"></section>
+      <section class="card acts"></section>
+    </div>
+    <div class="col-right">
+      <section class="card orders"></section>
+      <section class="card gates"></section>
+      <section class="card events"></section>
+      <section class="card last"></section>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="check"></div>
+    <button class="commit">提交本季</button>
+  </div>
+</div>
+
+<div id="mask" class="mask hidden"></div>
+<div class="tip"></div>
+<div class="toastwrap"></div>
+
+<script src="engine.js?v=3"></script>
+<script src="codex.js?v=3"></script>
+<script src="ui.js?v=3"></script>
+</body>
+</html>

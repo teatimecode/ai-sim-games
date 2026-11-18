@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 3,
+  "status": "PASS",
+  "verify": {
+    "command": "node qa/verify.mjs",
+    "exitCode": 0
+  },
+  "completeRun": {
+    "id": "main-path",
+    "cleanContext": true,
+    "terminal": "win",
+    "restart": "turn-1-initial",
+    "evidence": "qa/evidence/run.json"
+  },
+  "checks": {
+    "launch": "PASS",
+    "render": "PASS",
+    "input": "PASS",
+    "coreLoop": "PASS",
+    "outcome": "PASS",
+    "restart": "PASS"
+  },
+  "limitations": [
+    {
+      "scope": "render/input automation",
+      "reason": "沙箱无 Chromium 自动化依赖（puppeteer/playwright 均不可用），实机画面与真实点击由平台浏览器工具采集，verify.mjs 通过构建哈希与截图字节数校验其与当前代码同源"
+    },
+    {
+      "scope": "audio",
+      "reason": "声音方向未实现，构建版为纯静音"
+    },
+    {
+      "scope": "space chapter",
+      "reason": "第三章航天延伸仅交付设计接口，未实现"
+    },
+    {
+      "scope": "airline side",
+      "reason": "未实现航司运营侧；航司只作为客户与需求约束出现"
+    }
+  ]
+}

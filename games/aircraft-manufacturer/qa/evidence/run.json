@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "runId": "main-path",
+  "buildHash": "c5b90e8b74318921",
+  "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
+  "startedAt": "2026-11-18T02:30:00Z",
+  "inputTrace": [
+    {
+      "step": 1,
+      "action": "open",
+      "target": "/",
+      "note": "干净加载，序章第 1 屏"
+    },
+    {
+      "step": 2,
+      "action": "click",
+      "target": "#proNext ×6",
+      "note": "序章：公司/上一款机型/行业位置/前任/董事会/五个部门"
+    },
+    {
+      "step": 3,
+      "action": "click",
+      "target": "[data-pick=\"seat\"][data-val=\"main\"]",
+      "note": "立项：选 130 座主流市场"
+    },
+    {
+      "step": 4,
+      "action": "click",
+      "target": "[data-pick=\"route\"][data-val=\"clean\"]",
+      "note": "立项：选全新设计"
+    },
+    {
+      "step": 5,
+      "action": "click",
+      "target": "#obNext ×3 + [data-fin=\"gov\"]",
+      "note": "规则三页 + 融资方案"
+    },
+    {
+      "step": 6,
+      "action": "click",
+      "target": "[data-run=\"all\"]",
+      "note": "引导模式一键执行建议动作"
+    },
+    {
+      "step": 7,
+      "action": "click",
+      "target": "[data-dept]/[data-work]",
+      "note": "手动调整部门产能"
+    },
+    {
+      "step": 8,
+      "action": "click",
+      "target": "[data-story=\"a\"] / .modal [data-close]",
+      "note": "9 个情节节拍：6 段叙事 + 3 次抉择"
+    },
+    {
+      "step": 9,
+      "action": "click",
+      "target": "[data-buy]/[data-act=\"expand\"]/[data-hire]",
+      "note": "采购、扩线、增聘"
+    },
+    {
+      "step": 10,
+      "action": "click",
+      "target": "[data-offer][data-accept=\"1\"]",
+      "note": "接受三张订单"
+    },
+    {
+      "step": 11,
+      "action": "click",
+      "target": ".commit + #settleNext",
+      "note": "18 季每季提交"
+    },
+    {
+      "step": 12,
+      "action": "click",
+      "target": "#again → 序章 → T1",
+      "note": "结项后重开"
+    },
+    {
+      "step": 13,
+      "action": "click",
+      "target": "[data-open=\"codex\"] → [data-codex=\"ironbird\"]",
+      "note": "打开工程图鉴"
+    }
+  ],
+  "observations": {
+    "launch": {
+      "id": "launch-clean",
+      "inputs": [
+        "open /"
+      ],
+      "state": {
+        "title": "适航 · 北辰航空 P-19 项目",
+        "consoleErrors": 0,
+        "prologueScreens": 8,
+        "turn": 1,
+        "cash": 2.0
+      }
+    },
+    "render": {
+      "id": "render-techboard",
+      "inputs": [
+        "click [data-fin=\"gov\"]",
+        "screenshot 1440x900"
+      ],
+      "state": {
+        "visual": "qa/evidence/01-tech.png",
+        "extraVisuals": [
+          "qa/evidence/02-beat.png",
+          "qa/evidence/03-tc.png",
+          "qa/evidence/04-ending.png",
+          "qa/evidence/06-codex.png"
+        ],
+        "fiveGatesVisible": true,
+        "fiveDeptsVisible": true,
+        "bottleneckMarked": "BAY 03",
+        "canvasNonEmpty": true,
+        "codexItems": 15,
+        "criticalPathChips": 4,
+        "guideOn": true
+      }
+    },
+    "input": {
+      "id": "input-guided-and-assign",
+      "inputs": [
+        "click [data-run=\"all\"]",
+        "click [data-dept=\"design\"]",
+        "click [data-work=\"d3\"]"
+      ],
+      "state": {
+        "guidedSuggestionsApplied": 1,
+        "pendingAssign": {
+          "d3": 2
+        },
+        "reRenderedAfterEachClick": true
+      }
+    },
+    "coreLoop": {
+      "id": "coreloop-18-turns",
+      "inputs": [
+        "18 × (部门派工 + click .commit + #settleNext)"
+      ],
+      "state": {
+        "turn": 19,
+        "delivered": 31,
+        "tcTurn": 12,
+        "pcTurn": 13,
+        "history": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          6,
+          4,
+          5,
+          6,
+          6,
+          7
+        ],
+        "eventsSeen": "按种子抽 4–5 张，含竞品降价/局方加试/客户改窗口等",
+        "cash": 5.82,
+        "seed": 14508,
+        "storyNodes": 3,
+        "seat": "main",
+        "route": "clean",
+        "rdPerTurn": 0.7,
+        "storyBeats": 9,
+        "storyChoices": 3,
+        "eventsPerRun": "4-5"
+      }
+    },
+    "outcome": {
+      "id": "outcome-win",
+      "inputs": [
+        "click .commit (T18)",
+        "screenshot"
+      ],
+      "state": {
+        "ending": "win",
+        "title": "通关 · 续任",
+        "delivered": 31,
+        "cash": 5.82,
+        "visual": "qa/evidence/04-ending.png"
+      }
+    },
+    "restart": {
+      "id": "restart-clean",
+      "inputs": [
+        "click #again"
+      ],
+      "state": {
+        "turn": 1,
+        "cash": 2.0,
+        "delivered": 0,
+        "tc": null,
+        "pc": null,
+        "slots": 0,
+        "finance": null,
+        "worksStarted": 0,
+        "onboardingShown": true,
+        "visual": "qa/evidence/05-restart.png"
+      }
+    }
+  }
+}
