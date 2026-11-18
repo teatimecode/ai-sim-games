@@ -11,25 +11,17 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ENGINE = existsSync(resolve(ROOT, 'engine.js'))
-  ? resolve(ROOT, 'engine.js')
-  : resolve(ROOT, 'artifacts/engine.js');
-const E = require(ENGINE);
+// 唯一代码源：本目录（games/aircraft-manufacturer）。不再回退到会话工作区。
+const E = require(resolve(ROOT, 'engine.js'));
 const C = E.CONFIG;
 const failures = [];
 
 const assert = (cond, msg) => { if (!cond) failures.push(msg); };
 
-// 兼容两种布局：仓库内（游戏根目录）与会话工作区（artifacts/ 子目录）
-function asset(name) {
-  const direct = resolve(ROOT, name);
-  if (existsSync(direct)) return direct;
-  return resolve(ROOT, 'artifacts', name);
-}
 function buildHash() {
   const files = ['index.html', 'engine.js', 'ui.js', 'game.css', 'codex.js'];
   const h = createHash('sha256');
-  for (const f of files) h.update(readFileSync(asset(f)));
+  for (const f of files) h.update(readFileSync(resolve(ROOT, f)));
   return h.digest('hex').slice(0, 16);
 }
 
