@@ -1,0 +1,9 @@
+# 依赖与缓存
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+
+# 本地运行产物
+*.sqlite
+*.db
