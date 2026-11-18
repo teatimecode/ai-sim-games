@@ -1,4 +1,8 @@
-# _progress —《对位学徒》
+# _progress —《五度环》
+
+> **代码真源**：自 2026-11-18 起，本项目唯一代码真源是 `teatimecode/ai-sim-games` 的 `games/fifths-ring/`。
+> 本文档按轮次记录历史，文中出现的 `repo/funclass-ebdd37/`、`game-adaptations/` 等路径是当时的工作副本，
+> 已不再使用，仅作为过程留痕，不作为任何构建或发布的输入。
 
 ## 基本
 
@@ -9,7 +13,7 @@
 | `targetFinish` | `playable-prototype` |
 | `experienceProfile` | `hybrid`（第三轮起按 GAME_DESIGN 口径；第二轮记录里写的是 system-led） |
 | 当前阶段 | 首个可玩版本完成，已过实机验收；未进入美术量产 |
-| 工作区 | `game-adaptations/open-music-theory-trial/` |
+| 工作区 | `games/fifths-ring/`（代码真源，见上方说明） |
 
 ## 两项核对
 
@@ -156,7 +160,7 @@
 | 新增内容 | 三段现场合成的可听短文（8／12／15 小节），三个可玩房间 |
 | 可玩房间 | 12 → 15；仅讲解 12 → 9 |
 | 新增测试 | `tests/check.js`，222 条断言，一条命令跑完 |
-| 交付 | 代码与文档进入项目仓库 `funclass-ebdd37`，分支 `pacture/chat/group-0d6f604e7d614514b7c39fcd3cda8db9` |
+| 交付 | 第三轮曾提交到当时的本地工作副本；第四轮起以 `games/fifths-ring/` 为唯一真源 |
 
 ## 返工记录（第三轮）
 
@@ -232,7 +236,7 @@
 | 缺陷修复 | 顶栏「校记 N / 5」分母写死，营造司可玩后显示 6/5；改为按可玩城区数动态计算，结局文案改为六页 |
 | 口径统一 | README 断言数 222→371；三份文档补房间分布表；GAME_DESIGN 通关路径补上营造司三关 |
 | 版本 | 静态资源版本参数 v=8 |
-| 产物路径 | 可交付应用在 `repo/funclass-ebdd37/app/`；制作目录 `game-adaptations/open-music-theory-trial/` 为同源副本 |
+| 产物路径 | 可交付应用在本目录 `app/`（历史记录里的旧路径已废弃） |
 
 ## 房间分布（以代码为准）
 
