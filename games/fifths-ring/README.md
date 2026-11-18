@@ -48,10 +48,12 @@ node tests/check.js
 
 ```
 app/      静态应用（index.html / styles.css / game.js / pacture-artifact.json）
-design/   游戏设计、信息架构、美术方向、概念选型、实现约定、来源考据
+design/   游戏设计、信息架构、美术方向、概念选型、实现约定、来源考据、内容路线图
 qa/       验收记录，含未验证项
 tests/    规则与内容自检（node tests/check.js）
 ```
+
+后续内容扩展的取舍与下一版范围写在 `design/CONTENT_ROADMAP.md`。
 
 ## 授权与素材
 
