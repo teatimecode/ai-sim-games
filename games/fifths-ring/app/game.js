@@ -713,18 +713,28 @@ var ROOMS = [
     target: { tonic: 0, pcs: [0, 2, 4, 5, 7, 9, 11], label: 'C 大调', degrees: ['C', 'D', 'E', 'F', 'G', 'A', 'B'] }
   },
   {
-    id: 'r-meter', district: 'quarry', kind: 'locked', title: '节拍与分组',
-    meta: '只读 · 节拍', char: '维斯',
-    line: '拍子的事归营造司管。我这儿只给你留了一张抄录。',
+    id: 'r-meter', district: 'quarry', kind: 'rhythm', title: '把桥板铺满',
+    meta: '节奏 · 4/4 单拍子', char: '维斯',
+    line: '拍子归营造司管，可桥得你自己铺。一小节十六个最小单位，一格都不能空。',
     teach: {
-      title: '拍子是两个问题',
+      title: '拍号就是分组',
       body: [
-        '第一个问题是分组：一小组里有几拍，二拍、三拍还是四拍。',
-        '第二个问题是切分：每一拍分成两份还是三份。分成两份叫单拍子，分成三份叫复拍子。',
-        '两个问题乘起来就是拍号的全部内容，指挥的手势也是从这里来的。'
+        '4/4 的 4 说的是每小节四拍，下面的 4 说的是每一拍是四分音符。把一拍再切成四份，一小节就是十六个最小单位。',
+        '单拍子每拍分成两份，复拍子每拍分成三份。分组决定听感上的强弱，和音符长短一样重要。',
+        '桥要通，每小节总时值必须正好等于拍号，而且每一拍上都要有落音，否则分组就塌了。'
       ],
       quote: 'Duple, triple, and quadruple classifications result from the relationship between the counting pulse and the pulses that are slower than the counting pulse. In other words, it is a question of grouping: how many beats occur in each bar.',
       cite: 'meter.md:8'
+    },
+    guide: {
+      goal: '给两小节 4/4 的桥铺上音符或休止，让每小节正好十六个最小单位，并且每一拍都有落音。',
+      steps: ['先点「试听整段」，听一遍四拍的骨架。', '点一个小节选中它，再从素材板挑时值铺上去；铺满会自动跳到下一小节。', '铺错了用「撤销一块」或「清空这一小节」，两小节都满了再呈交。'],
+      done: '两小节各 16 个单位，四个拍点上都有落音。'
+    },
+    rhythm: {
+      meter: '4/4', bars: 2, ticksPerBar: 16, groups: [4, 4, 4, 4],
+      requireOnsets: [0, 4, 8, 12], forbidCrossing: false,
+      palette: [8, 4, 2, 1], allowRests: true
     }
   },
   {
@@ -756,6 +766,31 @@ var ROOMS = [
       ],
       quote: 'In general, all harmonic consonances are allowed.',
       cite: 'firstSpecies.md:41'
+    }
+  },
+  {
+    id: 'r-meter2', district: 'quarry', kind: 'rhythm', title: '复拍子的桥',
+    meta: '节奏 · 6/8 复拍子', char: '维斯',
+    line: '这回是 6/8。一小节分两大组，每组三个八分。先听，再铺。',
+    teach: {
+      title: '复拍子是三分的',
+      body: [
+        '6/8 一小节有六个八分音符，但它们不是六个平等的拍，而是两大组、每组三个。数的时候是 1-2-3、4-5-6。',
+        '所以 6/8 的一拍其实是附点四分音符，占六个最小单位。这一关里，一组就是一块大石头，音符不能横跨两块。',
+        '同样十二个单位，写成 3+3+3+3 是 3/4，写成 6+6 才是 6/8。数字一样，分组不一样，听感完全不同。'
+      ],
+      quote: 'Simple and compound classifications result from the relationship between the counting pulse and the pulses that are faster than the counting pulse. In other words, it is a question of division: does each beat divide into two equal parts, or three equal parts.',
+      cite: 'meter.md:10'
+    },
+    guide: {
+      goal: '给两小节 6/8 的桥铺上时值，每小节正好十二个单位，两组各六个单位处都要有落音，而且不能有音符横跨组界。',
+      steps: ['先点「试听整段」，注意重音是 1-2-3、4-5-6 而不是匀速六下。', '用附点四分或「四分＋八分」把每组铺满，别让一块横跨两组。', '两组都落音、两小节都满十二格时再呈交。'],
+      done: '两小节各 12 个单位，第 1 与第 7 个单位上都有落音，没有音符跨组界。'
+    },
+    rhythm: {
+      meter: '6/8', bars: 2, ticksPerBar: 12, groups: [6, 6],
+      requireOnsets: [0, 6], forbidCrossing: true,
+      palette: [6, 4, 2, 1], allowRests: true
     }
   },
   {
@@ -1300,7 +1335,8 @@ var state = {
   hintTier: {},
   records: {},
   pendingRecord: null,
-  compass: {}
+  compass: {},
+  rhythm: {}
 };
 
 function totalSlots(level) {
@@ -1322,7 +1358,7 @@ function saveState() {
       seals: state.seals, signed: state.signed, started: state.started,
       avatar: state.avatar, avatarSeed: state.avatarSeed, avatarConfirmed: state.avatarConfirmed,
       hintTier: state.hintTier, records: state.records,
-      compass: state.compass
+      compass: state.compass, rhythm: state.rhythm
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -1332,7 +1368,7 @@ function loadState() {
     var raw = window.localStorage.getItem(STORE_KEY);
     if (!raw) return;
     var d = JSON.parse(raw);
-    ['cp', 'scale', 'harmony', 'set', 'pop', 'form', 'cleared', 'seals', 'hintTier', 'records', 'compass'].forEach(function (k) {
+    ['cp', 'scale', 'harmony', 'set', 'pop', 'form', 'cleared', 'seals', 'hintTier', 'records', 'compass', 'rhythm'].forEach(function (k) {
       if (d[k] && typeof d[k] === 'object') state[k] = d[k];
     });
     if (d.signed) state.signed = d.signed;
@@ -1916,6 +1952,295 @@ function renderCompassRoom(room, body, barUi) {
   barUi.submit(mkBtn('回环城', 'btn', function () { clearRoom(room); }));
 }
 
+/* ================= 15e. 节奏桥梁 ================= */
+
+var TICK_LABEL = { 16: '全', 12: '附点二分', 8: '二分', 6: '附点四分', 4: '四分', 3: '附点八分', 2: '八分', 1: '十六分' };
+
+function rhythmState(room) {
+  if (!state.rhythm[room.id]) {
+    state.rhythm[room.id] = {
+      bars: (function () { var a = []; for (var i = 0; i < room.rhythm.bars; i++) a.push([]); return a; })(),
+      active: 0,
+      listened: false,
+      checked: false,
+      lastError: null
+    };
+  }
+  return state.rhythm[room.id];
+}
+
+function barTicks(room) { return room.rhythm.ticksPerBar; }
+
+function barSum(bar) {
+  var t = 0;
+  for (var i = 0; i < bar.length; i++) t += bar[i].len;
+  return t;
+}
+
+/* 判定：全部用整数刻度，不做浮点累加 */
+function judgeRhythm(room, bars) {
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+  var errors = [];
+  for (var b = 0; b < bars.length; b++) {
+    var bar = bars[b];
+    var sum = barSum(bar);
+    if (sum < per) errors.push({ code: 'INCOMPLETE', bar: b, deficit: per - sum, message: '第 ' + (b + 1) + ' 小节还差 ' + (per - sum) + ' 个最小单位。' });
+    if (sum > per) errors.push({ code: 'OVERFLOW', bar: b, excess: sum - per, message: '第 ' + (b + 1) + ' 小节多了 ' + (sum - per) + ' 个最小单位。' });
+
+    var t = 0, onsets = [];
+    for (var i = 0; i < bar.length; i++) {
+      onsets.push(t);
+      var start = t;
+      t += bar[i].len;
+      if (R.forbidCrossing) {
+        for (var g = 1; g < R.groups.length; g++) {
+          var boundary = 0;
+          for (var k = 0; k < g; k++) boundary += R.groups[k];
+          if (start < boundary && boundary < start + bar[i].len) {
+            errors.push({ code: 'CROSS', bar: b, slot: i, at: boundary, message: '第 ' + (b + 1) + ' 小节第 ' + (i + 1) + ' 块跨过了组界（第 ' + boundary + ' 个最小单位处）。' });
+          }
+        }
+      }
+    }
+    for (var r = 0; r < R.requireOnsets.length; r++) {
+      var need = R.requireOnsets[r];
+      if (onsets.indexOf(need) === -1) {
+        errors.push({ code: 'GROUPING', bar: b, at: need, message: '第 ' + (b + 1) + ' 小节第 ' + (need + 1) + ' 个最小单位上没有落音，分组听不出来。' });
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors: errors, first: errors.length ? errors[0] : null };
+}
+
+function rhythmSubmitCheck(room, st) {
+  var j = judgeRhythm(room, st.bars);
+  if (!st.listened) return { ok: false, code: 'NEED_LISTEN', message: '先点「试听整段」完整听一遍，再呈交。' };
+  if (!j.ok) return { ok: false, code: j.first.code, message: j.first.message };
+  return { ok: true };
+}
+
+/* 播放：遇到第一个断点就停，把问题听出来 */
+function playRhythm(room, st, opts) {
+  opts = opts || {};
+  var c = ensureAudio();
+  if (!c) return 0;
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+  var t0 = c.currentTime + 0.08;
+  var unit = 0.1;
+  var stopBar = opts.stopAtError ? -1 : -2;
+  if (opts.stopAtError) {
+    var j = judgeRhythm(room, st.bars);
+    if (j.first) stopBar = j.first.bar;
+  }
+  var t = 0;
+  for (var b = 0; b < st.bars.length; b++) {
+    if (b === stopBar && opts.stopAtError) break;
+    var bar = st.bars[b];
+    var local = 0;
+    for (var i = 0; i < bar.length; i++) {
+      var p = bar[i];
+      if (!p.rest) {
+        var accent = R.requireOnsets.indexOf(local) !== -1;
+        tone(accent ? 88 : 81, t0 + (t + local) * unit, 0.085, accent ? 0.16 : 0.1);
+      }
+      local += p.len;
+    }
+    t += per;
+  }
+  return t * unit;
+}
+
+function rhythmPlace(room, len, rest) {
+  var st = rhythmState(room);
+  var per = barTicks(room);
+  var b = st.active;
+  var used = barSum(st.bars[b]);
+  if (used + len > per) {
+    st.lastError = '第 ' + (b + 1) + ' 小节只剩 ' + (per - used) + ' 个最小单位，放不下 ' + len + '。先撤销，或换一块小的。';
+    renderRoom();
+    saveState();
+    return;
+  }
+  st.bars[b].push({ len: len, rest: !!rest });
+  st.checked = false;
+  if (barSum(st.bars[b]) === per) {
+    for (var i = 0; i < st.bars.length; i++) {
+      if (barSum(st.bars[i]) < per) { st.active = i; break; }
+    }
+  }
+  st.lastError = null;
+  renderRoom();
+  saveState();
+}
+
+function rhythmUndo(room) {
+  var st = rhythmState(room);
+  st.bars[st.active].pop();
+  st.checked = false;
+  st.lastError = null;
+  renderRoom();
+  saveState();
+}
+
+function rhythmClearBar(room) {
+  var st = rhythmState(room);
+  st.bars[st.active] = [];
+  st.checked = false;
+  st.lastError = null;
+  renderRoom();
+  saveState();
+}
+
+function rhythmSubmit(room) {
+  var st = rhythmState(room);
+  st.checked = true;
+  var r = rhythmSubmitCheck(room, st);
+  if (!r.ok) {
+    st.lastError = r.message;
+    renderRoom();
+    setSubmitMsg(r.message);
+    saveState();
+    return;
+  }
+  playRhythm(room, st, { stopAtError: false });
+  passRoom(room);
+  var total = 0;
+  for (var i = 0; i < st.bars.length; i++) total += barSum(st.bars[i]);
+  setTimeout(function () {
+    showVerdict({
+      eyebrow: '接上了',
+      title: room.title + ' · 桥通了',
+      paras: ['两小节各 ' + barTicks(room) + ' 个最小单位，一共 ' + total + ' 格，一格不多一格不少。'],
+      actions: [{ label: '回环城', cls: 'btn btn-ink', fn: function () { hideVerdict(); clearRoom(room); } }]
+    });
+  }, 700);
+  saveState();
+}
+
+function renderRhythmRoom(room, body, barUi) {
+  var st = rhythmState(room);
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+
+  var host = document.createElement('div');
+  host.className = 'rhythm-host';
+  body.appendChild(host);
+
+  st.bars.forEach(function (bar, bi) {
+    var row = document.createElement('div');
+    row.className = 'rb-row' + (bi === st.active ? ' is-active' : '');
+
+    var head = document.createElement('div');
+    head.className = 'rb-head';
+    var name = document.createElement('span');
+    name.textContent = '第 ' + (bi + 1) + ' 小节';
+    var left = document.createElement('span');
+    var used = barSum(bar);
+    var rest = per - used;
+    left.className = 'rb-left' + (rest < 0 ? ' is-over' : rest === 0 ? ' is-full' : '');
+    left.textContent = rest > 0 ? ('还差 ' + rest) : rest === 0 ? '满了' : ('多了 ' + (-rest));
+    head.appendChild(name);
+    head.appendChild(left);
+    row.appendChild(head);
+
+    var track = document.createElement('div');
+    track.className = 'rb-track';
+    track.setAttribute('data-bar', String(bi));
+    track.addEventListener('click', function () {
+      st.active = bi;
+      renderRoom();
+    });
+
+    for (var g = 1; g < R.groups.length; g++) {
+      var boundary = 0;
+      for (var k = 0; k < g; k++) boundary += R.groups[k];
+      var div = document.createElement('span');
+      div.className = 'rb-div';
+      div.style.left = (boundary / per * 100) + '%';
+      track.appendChild(div);
+    }
+
+    if (!bar.length) {
+      var empty = document.createElement('span');
+      empty.className = 'rb-empty';
+      empty.textContent = '空桥';
+      track.appendChild(empty);
+    }
+    bar.forEach(function (p, pi) {
+      var plank = document.createElement('span');
+      plank.className = 'rb-plank' + (p.rest ? ' is-rest' : '');
+      plank.style.width = (p.len / per * 100) + '%';
+      plank.title = (p.rest ? '休止·' : '') + TICK_LABEL[p.len] + '（' + p.len + ' 单位）';
+      plank.textContent = p.rest ? '休' : String(p.len);
+      track.appendChild(plank);
+    });
+    row.appendChild(track);
+    host.appendChild(row);
+  });
+
+  var pal = document.createElement('div');
+  pal.className = 'rhythm-palette';
+  var noteRow = document.createElement('div');
+  noteRow.className = 'rp-row';
+  var noteLabel = document.createElement('span');
+  noteLabel.className = 'rp-label';
+  noteLabel.textContent = '音符';
+  noteRow.appendChild(noteLabel);
+  R.palette.forEach(function (len) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rp-tile';
+    b.textContent = TICK_LABEL[len] + ' ' + len;
+    b.style.minWidth = (34 + len * 4) + 'px';
+    b.addEventListener('click', function () { rhythmPlace(room, len, false); });
+    noteRow.appendChild(b);
+  });
+  pal.appendChild(noteRow);
+
+  if (R.allowRests) {
+    var restRow = document.createElement('div');
+    restRow.className = 'rp-row';
+    var rl = document.createElement('span');
+    rl.className = 'rp-label';
+    rl.textContent = '休止';
+    restRow.appendChild(rl);
+    R.palette.forEach(function (len) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rp-tile is-rest';
+      b.textContent = '休 ' + TICK_LABEL[len] + ' ' + len;
+      b.addEventListener('click', function () { rhythmPlace(room, len, true); });
+      restRow.appendChild(b);
+    });
+    pal.appendChild(restRow);
+  }
+  body.appendChild(pal);
+
+  var hint = document.createElement('div');
+  hint.className = 'ring-hint';
+  var j = judgeRhythm(room, st.bars);
+  hint.textContent = st.lastError ? st.lastError : (j.ok ? '两小节都满了，先听一遍再呈交。' : '点一个小节选中它，再从素材板挑时值铺上去。');
+  body.appendChild(hint);
+
+  var items = [];
+  if (st.checked && st.lastError) items.push({ label: '未通过', message: st.lastError, cls: 'is-bad' });
+  renderMarkList(items, '桥还没铺。');
+
+  barUi.listen(mkBtn('试听整段', 'btn', function () {
+    var s2 = rhythmState(room);
+    s2.listened = true;
+    ensureAudio();
+    playRhythm(room, s2, { stopAtError: false });
+    renderRoom();
+    saveState();
+  }));
+  barUi.task(mkBtn('撤销一块', 'btn', function () { rhythmUndo(room); }));
+  barUi.task(mkBtn('清空这一小节', 'btn btn-quiet', function () { rhythmClearBar(room); }));
+  barUi.submit(mkBtn('呈交乐长', 'btn btn-ink', function () { rhythmSubmit(room); }));
+}
+
 /* ================= 15c. 化身、印记与校记 ================= */
 
 var SKIN = ['#f0d3bb', '#dfae8a', '#b47a54', '#6f4a34'];
@@ -2223,6 +2548,7 @@ function focusTarget(room) {
   if (room.kind === 'harmony' || room.kind === 'pop') return '.ledger-options';
   if (room.kind === 'form') return '.form-host';
   if (room.kind === 'compass') return '.compass-ring';
+  if (room.kind === 'rhythm') return '.rhythm-host';
   return null;
 }
 
@@ -2575,6 +2901,7 @@ var MECHANIC_HELP = {
   set: '环上亮着的音是一个集合。正常序要把它转到一个最紧凑的位置；共同音则要找出两组共有的音。两种都以「点环上的石头」为唯一操作。',
   pop: '循环和声按固定顺序转圈。每一步挑循环里的下一个和弦；接错会把循环提前收束，界面会说明断在哪。',
   form: '时间轴上每一段代表若干小节。先听，再给段落贴标签、点出结构点，或在小节线上切分界。三种操作都只靠点击。',
+  rhythm: '桥面按拍号切成最小单位。点一个小节选中它，再点素材板上的时值把桥板铺上去；铺满了会自动跳到下一小节。撤销只退当前小节最后一块，清空只清当前小节。',
   compass: '罗盘就是五度圈，每块石头是一个调号，上面写大调、下面写关系小调。点相邻的石头沿五度走一步，或者用「换关系调」在同一块石头上翻面。每走一步都会先响旧主和弦、再响新主和弦。',
   locked: '这一章只有讲解卡，没有可玩任务。读完要点就算看完。'
 };
@@ -2662,6 +2989,24 @@ function roomProgress(room) {
     out.next = p.step < room.rounds ? '选循环里的下一个和弦。' : '循环接上了。';
     out.ready = p.step >= room.rounds;
     out.hint = '接上最后一步自动结算，不用点提交';
+    return out;
+  }
+
+  if (room.kind === 'rhythm') {
+    var rs = rhythmState(room);
+    var perB = barTicks(room);
+    var filled = 0;
+    rs.bars.forEach(function (b) { filled += barSum(b); });
+    var totalB = perB * rs.bars.length;
+    out.progress = '已铺 ' + filled + ' / ' + totalB + ' 个最小单位';
+    if (!rs.listened) out.next = '先点「试听整段」听一遍，再开始铺。';
+    else if (filled < totalB) out.next = '点小节选中它，挑时值铺上去；铺满会自动跳下一小节。';
+    else out.next = '点「呈交乐长」看桥通不通。';
+    var jr = judgeRhythm(room, rs.bars);
+    out.ready = jr.ok && rs.listened;
+    out.hint = !rs.listened
+      ? '还没试听'
+      : (jr.ok ? '可以提交了' : jr.first.message);
     return out;
   }
 
@@ -2877,6 +3222,7 @@ function renderRoom() {
   else if (room.kind === 'pop') renderPopRoom(room, work, bar);
   else if (room.kind === 'form') renderFormRoom(room, work, bar);
   else if (room.kind === 'compass') renderCompassRoom(room, work, bar);
+  else if (room.kind === 'rhythm') renderRhythmRoom(room, work, bar);
   else renderLockedRoom(room, work, bar);
 
   bar.finish();
@@ -4089,6 +4435,12 @@ function passRoom(room) {
   saveState();
 }
 
+function endingEligible(s) {
+  s = s || state;
+  return DISTRICTS.filter(function (d) { return playableRoomsOfDistrict(d.id).length > 0; })
+    .every(function (d) { return !!(s.seals && s.seals[d.id]); });
+}
+
 function allPlayableCleared() {
   return ROOMS.filter(function (r) { return r.kind !== 'locked'; })
     .every(function (r) { return state.cleared[r.id]; });
@@ -4106,7 +4458,7 @@ function clearRoom(room) {
     setTimeout(function () { showRecordBeat(did); }, 260);
     return;
   }
-  if (allPlayableCleared() && !state.signed) setTimeout(showEnding, 320);
+  if (endingEligible() && !state.signed) setTimeout(showEnding, 320);
 }
 
 function sealBadge(av, size) {
@@ -4350,6 +4702,8 @@ if (typeof module !== 'undefined' && module.exports) {
     hasSave: hasSave, ctaLabel: ctaLabel, routeOnBoot: routeOnBoot,
     nextRecommended: nextRecommended, DISTRICT_MARK: DISTRICT_MARK,
     makeAvatar: makeAvatar, mulberry32: mulberry32, randomSeed: randomSeed,
+    judgeRhythm: judgeRhythm, rhythmSubmitCheck: rhythmSubmitCheck, barSum: barSum,
+    barTicks: barTicks, endingEligible: endingEligible, TICK_LABEL: TICK_LABEL,
     compassDistance: compassDistance, compassNeighbors: compassNeighbors, compassKeyOf: compassKeyOf,
     AVATAR_DEFAULT: AVATAR_DEFAULT
   };

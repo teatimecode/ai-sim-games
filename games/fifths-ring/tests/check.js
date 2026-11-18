@@ -30,8 +30,8 @@ function ok(name, cond, detail) {
 /* ---------- 1. 房间与教程卡完整性 ---------- */
 const rooms = m.ROOMS;
 const districts = m.DISTRICTS;
-ok('room count 26', rooms.length === 26, 'got ' + rooms.length);
-ok('playable rooms 17', rooms.filter((r) => r.kind !== 'locked').length === 17, 'got ' + rooms.filter((r) => r.kind !== 'locked').length);
+ok('room count 27', rooms.length === 27, 'got ' + rooms.length);
+ok('playable rooms 19', rooms.filter((r) => r.kind !== 'locked').length === 19, 'got ' + rooms.filter((r) => r.kind !== 'locked').length);
 ok('district count 6', districts.length === 6, 'got ' + districts.length);
 
 const ids = new Set();
@@ -296,7 +296,7 @@ ok('compass rooms exist', rooms.filter((r) => r.kind === 'compass').length >= 1)
 ok('six district marks', Object.keys(m.DISTRICT_MARK).length === 6);
 ok('marks match districts', districts.every((d) => !!m.DISTRICT_MARK[d.id]));
 ok('next: first room of current district', m.nextRecommended({ district: 'quarry', cleared: {} }) === 'r-c-major');
-ok('next: skips cleared rooms', m.nextRecommended({ district: 'quarry', cleared: { 'r-c-major': true } }) === 'r-g-major');
+ok('next: skips cleared rooms', m.nextRecommended({ district: 'quarry', cleared: { 'r-c-major': true } }) === 'r-meter');
 const quarryAll = {};
 rooms.filter((r) => r.district === 'quarry' && r.kind !== 'locked').forEach((r) => { quarryAll[r.id] = true; });
 ok('next: moves to another district', m.nextRecommended({ district: 'quarry', cleared: quarryAll }) === 'r-cp1');
@@ -341,6 +341,69 @@ ok('avatar: reroll button is secondary', src.indexOf("reroll.textContent = '换�
 ok('avatar: creator no longer gates first entry',
   src.indexOf('!state.avatarConfirmed') === -1);
 ok('avatar: clearing progress resets it', src.indexOf('state.avatarSeed = null;') !== -1);
+
+/* ---------- 16. 节奏桥梁 ---------- */
+const rhythmRooms = rooms.filter((r) => r.kind === 'rhythm');
+ok('two rhythm rooms', rhythmRooms.length === 2, 'got ' + rhythmRooms.length);
+rhythmRooms.forEach((r) => {
+  ok('rhythm has meter ' + r.id, !!r.rhythm.meter);
+  ok('rhythm bars positive ' + r.id, r.rhythm.bars >= 1);
+  ok('rhythm ticks match meter ' + r.id,
+    r.rhythm.ticksPerBar === r.rhythm.groups.reduce((a, b) => a + b, 0));
+  ok('rhythm palette inside bar ' + r.id, r.rhythm.palette.every((t) => t > 0 && t <= r.rhythm.ticksPerBar));
+  ok('rhythm requires a first onset ' + r.id, r.rhythm.requireOnsets.indexOf(0) !== -1);
+});
+
+const roomA = rhythmRooms.find((r) => r.id === 'r-meter');
+const roomB = rhythmRooms.find((r) => r.id === 'r-meter2');
+
+function mk(len, rest) { return { len: len, rest: !!rest }; }
+function bars(spec) { return spec.map((b) => b.map((x) => (typeof x === 'number' ? mk(x) : mk(x[0], x[1])))); }
+
+ok('A: four quarters per bar passes',
+  m.judgeRhythm(roomA, bars([[4, 4, 4, 4], [4, 4, 4, 4]])).ok === true);
+ok('A: eighths then quarters also passes (equivalent notation)',
+  m.judgeRhythm(roomA, bars([[2, 2, 4, 4, 4], [4, 4, 4, 4]])).ok === true);
+ok('A: a half note alone misses beat 2', m.judgeRhythm(roomA, bars([[8, 8], [4, 4, 4, 4]])).ok === false);
+ok('A: mixed values pass (equivalent notation)',
+  m.judgeRhythm(roomA, bars([[4, 2, 2, 4, 4], [4, 4, 2, 2, 4]])).ok === true);
+ok('A: rests count toward the bar',
+  m.judgeRhythm(roomA, bars([[4, [4, 1], 4, 4], [4, 4, 4, 4]])).ok === true);
+
+const shortA = m.judgeRhythm(roomA, bars([[4, 4, 4], [4, 4, 4, 4]]));
+ok('A: incomplete is reported with a deficit', !shortA.ok && shortA.first.code === 'INCOMPLETE' && shortA.errors[0].deficit === 4);
+const overA = m.judgeRhythm(roomA, bars([[8, 8, 8], [4, 4, 4, 4]]));
+ok('A: overflow is reported with an excess', !overA.ok && overA.first.code === 'OVERFLOW' && overA.errors[0].excess === 8);
+const groupA = m.judgeRhythm(roomA, bars([[8, 8], [8, 4, 4]]));
+ok('A: legal total but missing a beat onset is GROUPING', !groupA.ok && groupA.first.code === 'GROUPING' && groupA.errors[0].at === 4);
+ok('A: crossing a beat is allowed', m.judgeRhythm(roomA, bars([[2, 2, 4, 4, 4], [4, 4, 4, 4]])).errors.filter((e) => e.code === 'CROSS').length === 0);
+
+ok('B: two dotted quarters per bar passes',
+  m.judgeRhythm(roomB, bars([[6, 6], [6, 6]])).ok === true);
+ok('B: quarter+eighth grouped per beat also passes',
+  m.judgeRhythm(roomB, bars([[4, 2, 6], [2, 4, 6]])).ok === true);
+const crossB = m.judgeRhythm(roomB, bars([[8, 4], [6, 6]]));
+ok('B: a note crossing the group boundary is CROSS', !crossB.ok && crossB.first.code === 'CROSS' && crossB.errors[0].at === 6);
+const groupB = m.judgeRhythm(roomB, bars([[4, 4, 4], [6, 6]]));
+ok('B: no onset on the second group is GROUPING', !groupB.ok && groupB.errors.some((e) => e.code === 'GROUPING' && e.at === 6));
+
+const listenState = { bars: bars([[4, 4, 4, 4], [4, 4, 4, 4]]), listened: false };
+ok('submit: listening is required even when the bridge is full',
+  m.rhythmSubmitCheck(roomA, listenState).code === 'NEED_LISTEN');
+ok('submit: full bridge plus listening passes',
+  m.rhythmSubmitCheck(roomA, { bars: listenState.bars, listened: true }).ok === true);
+ok('submit: incomplete bridge is refused',
+  m.rhythmSubmitCheck(roomA, { bars: bars([[4, 4], [4, 4, 4, 4]]), listened: true }).ok === false);
+
+/* 存档迁移：印记粘性，旧档不被撤销终局资格 */
+ok('ending: all seals grants the ending', m.endingEligible({ seals: { quarry: 1, masonry: 1, hall: 1, works: 1, frontier: 1, market: 1 } }) === true);
+ok('ending: a missing seal blocks it', m.endingEligible({ seals: { quarry: 1, masonry: 1, hall: 1, works: 1, frontier: 1 } }) === false);
+ok('ending: an old save keeps eligibility after new rooms are added',
+  m.endingEligible({ seals: { quarry: 1, masonry: 1, hall: 1, works: 1, frontier: 1, market: 1 }, cleared: {} }) === true);
+
+ok('rhythm state is persisted', src.indexOf('rhythm: state.rhythm') !== -1);
+ok('rhythm tiles are real buttons', src.indexOf("b.type = 'button'") !== -1 && src.indexOf('rp-tile') !== -1);
+ok('rhythm has no drag dependency', src.indexOf('dragstart') === -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
