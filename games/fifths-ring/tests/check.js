@@ -313,6 +313,35 @@ ok('record beat has four choices', ['修正', '保留', '并记', '留白'].ever
 ok('ending personalises', src.indexOf('sealBadge') !== -1 && src.indexOf('record-summary') !== -1);
 ok('back button uses clearRoom', src.indexOf('if (room) { clearRoom(room); return; }') !== -1);
 
+/* ---------- 15. 随机化身 ---------- */
+const av1 = m.makeAvatar(12345);
+const av2 = m.makeAvatar(12345);
+ok('avatar: same seed gives same look', JSON.stringify(av1) === JSON.stringify(av2));
+ok('avatar: body in range', av1.body >= 0 && av1.body < 3);
+ok('avatar: hair in range', av1.hair >= 0 && av1.hair < 4);
+ok('avatar: skin in range', av1.skin >= 0 && av1.skin < 4);
+ok('avatar: cloth in range', av1.cloth >= 0 && av1.cloth < 4);
+ok('avatar: seal in range', av1.seal >= 0 && av1.seal < 6);
+
+let allLegal = true;
+const looks = new Set();
+for (let seed = 0; seed < 500; seed++) {
+  const a = m.makeAvatar(seed);
+  looks.add(JSON.stringify(a));
+  if (!(a.body >= 0 && a.body < 3 && a.hair >= 0 && a.hair < 4 && a.skin >= 0 && a.skin < 4 &&
+        a.cloth >= 0 && a.cloth < 4 && a.seal >= 0 && a.seal < 6)) allLegal = false;
+}
+ok('avatar: 500 seeds are all legal', allLegal);
+ok('avatar: seeds produce variety', looks.size > 20, 'distinct=' + looks.size);
+
+ok('avatar: generated when missing',
+  src.indexOf('if (state.avatar) return;') !== -1 && src.indexOf('state.avatar = makeAvatar(state.avatarSeed)') !== -1);
+ok('avatar: reroll keeps a new seed', src.indexOf('function randomizeAvatar()') !== -1);
+ok('avatar: reroll button is secondary', src.indexOf("reroll.textContent = '换一个随机形象'") !== -1);
+ok('avatar: creator no longer gates first entry',
+  src.indexOf('!state.avatarConfirmed') === -1);
+ok('avatar: clearing progress resets it', src.indexOf('state.avatarSeed = null;') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

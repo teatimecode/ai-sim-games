@@ -1295,6 +1295,7 @@ var state = {
   signed: null,
   started: false,
   avatar: null,
+  avatarSeed: null,
   avatarConfirmed: false,
   hintTier: {},
   records: {},
@@ -1319,7 +1320,7 @@ function saveState() {
       cp: state.cp, scale: state.scale, harmony: state.harmony,
       set: state.set, pop: state.pop, form: state.form, cleared: state.cleared,
       seals: state.seals, signed: state.signed, started: state.started,
-      avatar: state.avatar, avatarConfirmed: state.avatarConfirmed,
+      avatar: state.avatar, avatarSeed: state.avatarSeed, avatarConfirmed: state.avatarConfirmed,
       hintTier: state.hintTier, records: state.records,
       compass: state.compass
     }));
@@ -1337,6 +1338,7 @@ function loadState() {
     if (d.signed) state.signed = d.signed;
     if (d.started) state.started = true;
     if (d.avatar) state.avatar = d.avatar;
+    if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
     if (d.roomId && ROOM_INDEX[d.roomId]) { state.roomId = d.roomId; state.view = 'room'; }
@@ -2061,8 +2063,45 @@ function markRow(size) {
 
 var creatorOpen = false;
 
+/* 可复现的伪随机：同一 seed 必得同一化身，便于测试与「换一个」重放。
+   不是密码学随机，只保证组合合法、分布均匀。 */
+function mulberry32(a) {
+  a = a >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomSeed() {
+  return (Math.random() * 4294967296) >>> 0;
+}
+
+function makeAvatar(seed) {
+  var rnd = mulberry32(seed);
+  var pick = function (n) { return Math.floor(rnd() * n) % n; };
+  return {
+    body: pick(3),
+    hair: pick(4),
+    skin: pick(4),
+    cloth: pick(4),
+    seal: pick(6)
+  };
+}
+
 function ensureAvatar() {
-  if (!state.avatar) state.avatar = Object.assign({}, AVATAR_DEFAULT);
+  if (state.avatar) return;
+  if (!Number.isInteger(state.avatarSeed)) state.avatarSeed = randomSeed();
+  state.avatar = makeAvatar(state.avatarSeed);
+  saveState();
+}
+
+function randomizeAvatar() {
+  state.avatarSeed = randomSeed();
+  state.avatar = makeAvatar(state.avatarSeed);
+  saveState();
 }
 
 function renderCreator(host, onDone) {
@@ -2304,8 +2343,8 @@ function renderLanding() {
   var avHost = $('landingAvatar');
   if (avHost) {
     avHost.innerHTML = '';
-    if (creatorOpen || !state.avatarConfirmed) {
-      creatorOpen = true;
+    ensureAvatar();
+    if (creatorOpen) {
       renderCreator(avHost, function () { renderLanding(); });
     } else {
       var arow = document.createElement('div');
@@ -2320,15 +2359,25 @@ function renderLanding() {
       sub.className = 'landing-av-sub';
       var got = Object.keys(state.seals || {}).filter(function (k) { return state.seals[k]; }).length;
       sub.textContent = got ? ('已经拿到 ' + got + ' / 6 枚印记') : '还没有印记，先从一个城区开始。';
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn-quiet';
-      btn.textContent = '改形象';
-      btn.addEventListener('click', function () { creatorOpen = true; renderLanding(); });
       side.appendChild(nm);
       side.appendChild(sub);
       side.appendChild(markRow(16));
-      side.appendChild(btn);
+
+      var avActions = document.createElement('div');
+      avActions.className = 'avatar-actions';
+      var reroll = document.createElement('button');
+      reroll.type = 'button';
+      reroll.className = 'btn btn-mini';
+      reroll.textContent = '换一个随机形象';
+      reroll.addEventListener('click', function () { randomizeAvatar(); renderLanding(); });
+      var edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-mini btn-quiet';
+      edit.textContent = '改形象';
+      edit.addEventListener('click', function () { creatorOpen = true; renderLanding(); });
+      avActions.appendChild(reroll);
+      avActions.appendChild(edit);
+      side.appendChild(avActions);
       arow.appendChild(side);
       avHost.appendChild(arow);
     }
@@ -2366,6 +2415,9 @@ function resetProgress() {
   state.cleared = {};
   state.seals = {};
   state.signed = null;
+  state.avatar = null;
+  state.avatarSeed = null;
+  state.avatarConfirmed = false;
   state.roomId = null;
   state.district = 'quarry';
   state.started = false;
@@ -4297,6 +4349,7 @@ if (typeof module !== 'undefined' && module.exports) {
     GUIDES: GUIDES, MECHANIC_HELP: MECHANIC_HELP, guideFor: guideFor,
     hasSave: hasSave, ctaLabel: ctaLabel, routeOnBoot: routeOnBoot,
     nextRecommended: nextRecommended, DISTRICT_MARK: DISTRICT_MARK,
+    makeAvatar: makeAvatar, mulberry32: mulberry32, randomSeed: randomSeed,
     compassDistance: compassDistance, compassNeighbors: compassNeighbors, compassKeyOf: compassKeyOf,
     AVATAR_DEFAULT: AVATAR_DEFAULT
   };
