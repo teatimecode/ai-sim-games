@@ -1,0 +1,564 @@
+{
+  "project": "wuduhuan",
+  "source": "openmusictheory/openmusictheory.github.io",
+  "builtAt": "2026-11-13",
+  "runtime": "静态页面，python3 -m http.server 于沙箱预览会话内运行",
+  "scope": "6 城区、24 房间；15 个可玩、9 个仅讲解",
+  "automated": {
+    "command": "node tests/check.js",
+    "result": "passed: 490  failed: 0",
+    "covers": [
+      "房间与教程卡完整性（每间都有标题、要点、原文引用与出处）",
+      "对位四关回溯求解均有解，示范解法与判定一致",
+      "和声每个局面至少一个合法选项且有干扰项",
+      "拼音阶三个房间的音级集合与主音自洽",
+      "音集房间的正常序最小跨度与共同音非空",
+      "曲式三房间：小节数据、段落无缝覆盖、标签索引、结构点范围、分界合法",
+      "曲式判据级用例：标准答案必过，错标、漏标、少切、错切、结构点偏移必拒",
+      "拼写往返：每关用到的音高都能从音名反解回同一 MIDI；拼写表未命中时保留音级",
+      "源码守卫：不存在死的 onPass 回调，六种玩法都调用过 passRoom",
+      "源码守卫：tone 拒绝非有限音高，三个试听按钮在空内容时给出说明",
+      "新手引导：15 间都有 objective/steps/done，目标互不重复，七类玩法的说明齐全",
+      "提交空态：对位、拼音阶、音集、曲式四条路径都有具体缺口文案",
+      "落地页与路由：无存档落落地页、有进度回地图或房间、CTA 文案随存档切换、清除必须二次确认",
+      "全局 [hidden] 规则存在，空按钮组与清除确认不会被组件的 display 规则顶出来",
+      "调性罗盘：最短步数、对称性、关系调相邻与两个房间存在",
+      "推荐下一关：当前城区优先、跳过已校、跨城区、全清返回空",
+      "六枚印记与城区一一对应；化身定制五组选项；三档提示与四选校记的源码守卫"
+    ],
+    "log": "qa/test-run.log",
+    "runAt": "2026-11-13T04:16:37Z",
+    "exitCode": 0
+  },
+  "checks": [
+    {
+      "id": "launch",
+      "status": "PASS",
+      "evidence": "browser.navigate 返回 200；多次读取 browser.console.logs 均为空数组；标题为「五度环 · 一座由音程承重的城」，地图渲染 6 个城区节点。",
+      "method": "实机导航 + 控制台读取"
+    },
+    {
+      "id": "render",
+      "status": "PASS",
+      "evidence": "地图 6 节点；营造司面板列出 4 行房间，其中 3 行为「可进入」。曲式房间渲染时间轴：主题房 2 段 8 小节、奏鸣房 4 段 12 小节、回旋房 1 段 15 小节与 14 个分界手柄；标签与说明按钮均正确。对位房符头坐标此前已逐点核对，本轮改动未触及。 试听链路：空选与空谱位均改为显式提示；有内容时创建 28 个振荡器并点亮环节点。 视口证据见 viewport 字段：1280/1024/768 三档横向溢出均为 0。",
+      "method": "读取 DOM 与 SVG 结构比对预期"
+    },
+    {
+      "id": "input",
+      "status": "PASS",
+      "evidence": "点段落选中、点标签赋值、点小节号落结构点、点小节线切分界，四种操作都即时改变画面并写入存档；对位房点击调色板与拼音阶点击环节点仍正常。 本轮补测：和声、音集、市集、对位各走通一间。",
+      "method": "真实点击 + localStorage 读取"
+    },
+    {
+      "id": "coreLoop",
+      "status": "PASS",
+      "evidence": "曲式三房间完整闭环：主题房错标第 1 段为「过渡」时，判定回「第 1 段不是「过渡」。前三小节在主调 C 上陈述并收住，这是主部。」；改正后过关。回旋房先放 2 条分界时回「需要 4 条分界，你放了 2 条」，补齐 4、7、10、13 后过关。奏鸣房四段标签与结构终止点全部命中后过关。",
+      "method": "逐间真实操作，成功与失败各一条路径"
+    },
+    {
+      "id": "outcome",
+      "status": "PASS",
+      "evidence": "三间曲式房通过后 cleared 依次写入 r-theme、r-sonata、r-rondo；营造司全部可玩房间通过后 seals.works=true，地图节点显示 3/3 与「已校」。 本轮补测：对位第一间提交后 cleared 增加 r-cp1（修复前不会写入）。 逐间结果见 matrix 字段的 15 条记录。",
+      "method": "localStorage 与地图 DOM 比对"
+    },
+    {
+      "id": "restart",
+      "status": "PASS",
+      "evidence": "刷新后自动回到上次所在房间；进入主题房时段落标签仍为「陈述／延续」，结构点标记仍在，地图进度为营造司 3/3。曲式进度在修复存档字段前不落盘，修复后已验证写入 state.form。",
+      "method": "整页重载后比对 localStorage 与 DOM"
+    }
+  ],
+  "worldChecks": [
+    {
+      "id": "audioForm",
+      "status": "PASS",
+      "evidence": "点击「试听全曲」后，通过 AudioContext.prototype.createOscillator 探针计数到 152 个振荡器，AudioContext.state 为 running，播放头元素存在。逐小节合成为每小节一个和弦加一到两个旋律音。",
+      "method": "原型探针计数 + 上下文状态读取"
+    },
+    {
+      "id": "teaching",
+      "status": "PASS",
+      "evidence": "三个曲式房间的讲解卡与新判据一一对应：陈述／延续对应 sentence.md，主部／过渡／副部／结束部对应 SonataTheory-intro.md，叠句靠回来辨认对应 rondo.md。判据中每段自带 why，答错时直接引用。",
+      "method": "点击讲解按钮读取内容并与判据文案对照"
+    },
+    {
+      "id": "counterpointRegression",
+      "status": "PASS",
+      "evidence": "合并曲式后 `node tests/check.js` 中四关仍全部可解，节点数与前次一致；浏览器内老房间仍可进入与操作。",
+      "method": "自动化测试 + 实机抽查"
+    }
+  ],
+  "fixedThisRound": [
+    "曲式进度未写入存档：saveState 漏了 form 字段，重载会丢失标签与结构点，已修复并验证。",
+    "页边标记空态文案统一为「眼下没有违例」，在拼音阶、和声、音集、市集、曲式、仅讲解房间都不合语境，改为按房间区分的提示。",
+    "时间轴小节刻度缺少基线，读起来像浮线，补了刻度条底与基线。",
+    "样式与脚本版本参数由 v=2 提到 v=4，避免旧缓存。",
+    "PRODUCT_BRIEF 仍写着「曲式只完成设计与讲解卡」，与已实现的三个曲式房间冲突，已改。",
+    "拼写表未命中时静默返回 C，会把任何表外音级显示成 C，改为退回等音拼写。",
+    "清理未使用的 .page-count 样式。",
+    "_progress 与 GAME_DESIGN 的 experienceProfile 口径统一为 hybrid，并标注第二轮记录为历史状态。",
+    "对位房间过关不记校记：passRoom 被放进一个从未执行的 onPass 字段，导致石作永远拿不到校记、整局无法通关。已改为结算前直接记账，并加源码守卫。",
+    "用户反馈「试听这组石」听不到声音：未选石头时按钮静默 return，连音频上下文都没建，点击没有任何反馈。改为解锁音频并提示「先点几块石，再试听」，播放后显示正在试听的音名与音数，环上的石头按顺序点亮。",
+    "对位「试听这一音」在空谱位时会创建频率为 NaN 的振荡器，只响一半且无提示。改为提示「这一格还空着」。",
+    "tone() 增加非有限音高保护，避免 null 进入频率计算。",
+    "顶栏「校记 N / 5」把分母写死，营造司变成可玩后显示 6/5。改为按有可玩房间的城区数动态计算，结局文案同步为六页校记。",
+    "README 的断言数仍是 222，qa 里是 371，统一为 371。",
+    "GAME_DESIGN 的通关路径漏掉营造司三关且写成「读四张卡」，已改为六城区路径。",
+    "新手引导缺失：15 间补齐任务卡、进度行与按钮分组，提交前置条件给出具体缺口，侧栏新增可重开的「怎么玩」。",
+    "渲染函数里原有的局部变量 bar 遮蔽了新的按钮栏参数，导致按钮全部不渲染；参数改名为 barUi。",
+    "补落地页与路由：首次访问落落地页，有进度回上次页面，清除进度需二次确认。",
+    "点「开始旅程」后存档里 view 仍是 landing，刷新会弹回落地页；改为先定 view 再存，并在每次渲染地图与房间后落一次存档。",
+    "全局 [hidden] 规则缺失，被 .reset-confirm 的 display:inline-flex 覆盖，导致清除确认条默认就显示、空按钮组留空行；补 [hidden]{display:none !important}。",
+    "顶部「回到环城」按钮绕过了 clearRoom，从它返回时城区校记与终页都不触发；改为走 clearRoom。",
+    "renderCreator 把宿主元素的 class 覆盖成 creator，容器一直带边框；改为内部包一层。",
+    "批量改写的 replace 把 host.appendChild(box) 改成了 box.appendChild(box)，导致定制面板整块不渲染；已修正。",
+    "「体态」三个色块只设背景没写文字，显示为空；改为颜色与文字分开判断，符号项直接画小印。",
+    "调性罗盘的分发分支漏加，房间落到「仅讲解」；补上 kind === compass。"
+  ],
+  "notVerified": [
+    "音色与音量平衡未经人耳复核，仅有信号级证据（峰值 0.155、RMS 0.049，非静音）。",
+    "曲式的段落可辨性依赖听觉判断，本次只验证了判定与交互，没有验证「听得出调性转移」。",
+    "未做触屏手势与移动端横屏测试。",
+    "加兰特图式与诗文分析仍是仅讲解，不在可玩范围。",
+    "化身与提示只做了 1280 与 768 两档检查，未做触屏手势。"
+  ],
+  "ruleCoverage": {
+    "engine": "judge / harmonyIssues / orderFrom / minSpanOf / commonTonesOf / formJudge 均为纯函数，可在 node 内复算",
+    "hardRules": 17,
+    "harmonyRules": 3,
+    "setRules": 2,
+    "scaleRules": 2,
+    "formRules": 3,
+    "advisories": 3,
+    "rooms": 24,
+    "playable": 15,
+    "teachCards": 24
+  },
+  "scopeNotCovered": [
+    "主题复现类玩法未做：三个曲式房间是辨识与结构判断（贴标签、标结构点、切分界），没有让玩家重唱或拼回主题音高。",
+    "加兰特图式与诗文分析只有讲解卡。"
+  ],
+  "blockers": [
+    {
+      "id": "publish_gateway_unavailable",
+      "since": "2026-11-13T03:13Z",
+      "lastAttempt": "2026-11-13T04:44:41Z",
+      "detail": "application_validate 与 application_publish_request 连续返回 \"Application Publish Gateway is unavailable\"。清单缺失、清单不合法（staticRoot: \".\"）、路径不安全三类前置问题已逐个排除。",
+      "impact": "无法完成发布校验与正式发布，只能提供会话授权的沙箱预览。",
+      "needs": "网关恢复后重跑 validate 与 publish。",
+      "lastError": "Application Publish Gateway is unavailable",
+      "attempts": [
+        {
+          "at": "2026-11-13T03:13Z",
+          "call": "application.validate",
+          "error": "Application Publish Gateway is unavailable"
+        },
+        {
+          "at": "2026-11-13T04:13:35Z",
+          "call": "application.validate",
+          "error": "Application Publish Gateway is unavailable"
+        },
+        {
+          "at": "2026-11-13T04:13:40Z",
+          "call": "application.publish.request(offer)",
+          "error": "Application Publish Gateway is unavailable"
+        },
+        {
+          "at": "2026-11-13T04:44:41Z",
+          "call": "application.validate",
+          "error": "Application Publish Gateway is unavailable"
+        }
+      ]
+    },
+    {
+      "id": "knowledge_draft_needs_ui_confirm",
+      "detail": "两页知识库草稿仍为 draft，wiki commit_count=0；提交需要用户在提交面板确认，工具层面无法代签。",
+      "impact": "知识库 submitted=false",
+      "needs": "用户在提交面板点击确认"
+    },
+    {
+      "id": "upstream_conflict_check_not_run",
+      "detail": "交付评审的冲突检测结果为 not_run，无法证明与上游无重叠。",
+      "impact": "合并前需平台重跑冲突检测",
+      "needs": "平台恢复冲突检测能力"
+    }
+  ],
+  "matrix": {
+    "method": "浏览器内脚本按每间的标准答案逐间操作并提交，读取判定标题与存档 cleared 后记录；15 间顺序执行，最后触发终页并完成署名。",
+    "result": "15 / 15 通过",
+    "rooms": [
+      {
+        "room": "r-c-major",
+        "title": "十二块石头 · C 大调",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-g-major",
+        "title": "升号从哪来 · G 大调",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-d-dorian",
+        "title": "同一组石头，两种城 · d 多利亚",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-cp1",
+        "title": "一对一开始 · 无瑕",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-cp2",
+        "title": "小调与导音 · 无瑕",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-cp3",
+        "title": "写在下方 · 无瑕",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-cp4",
+        "title": "二对一 · 无瑕",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-func",
+        "title": "功能的方向 · 已平",
+        "verdict": "账平",
+        "cleared": true
+      },
+      {
+        "room": "r-debt",
+        "title": "欠账必还 · 已平",
+        "verdict": "账平",
+        "cleared": true
+      },
+      {
+        "room": "r-theme",
+        "title": "主题的两半 · 蓝图对上了",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-sonata",
+        "title": "呈示部的两个调 · 蓝图对上了",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-rondo",
+        "title": "叠句回来了几次 · 蓝图对上了",
+        "verdict": "校毕",
+        "cleared": true
+      },
+      {
+        "room": "r-normal",
+        "title": "最紧排列 · 跨度 8",
+        "verdict": "测毕",
+        "cleared": true
+      },
+      {
+        "room": "r-common",
+        "title": "共同音 · 共同音 2 个",
+        "verdict": "测毕",
+        "cleared": true
+      },
+      {
+        "room": "r-doowop",
+        "title": "循环续写 · 一圈",
+        "verdict": "接上了",
+        "cleared": true
+      }
+    ],
+    "ending": "全部通过后 cleared=15、六个城区 seals 全为 true，终页出现并带署名输入框；签名后 signed 写入。"
+  },
+  "viewport": {
+    "checked": [
+      {
+        "width": 1280,
+        "height": 720,
+        "hOverflow": 0,
+        "note": "主视口，六城区地图与房间布局正常"
+      },
+      {
+        "width": 1024,
+        "height": 768,
+        "hOverflow": 0,
+        "note": "双栏布局，环 520px、侧栏 286px，无横向溢出"
+      },
+      {
+        "width": 768,
+        "height": 1024,
+        "hOverflow": 0,
+        "note": "单栏堆叠，侧栏移到纸页下方，时间轴 684px，标题未被裁切"
+      }
+    ],
+    "notChecked": "未做触屏手势与横屏手机比例测试。"
+  },
+  "audioSignal": {
+    "method": "用与 tone() 相同的包络与谐波配比在 OfflineAudioContext 中离线渲染 0.5 秒，统计峰值与 RMS。",
+    "result": {
+      "peak": 0.1551,
+      "rms": 0.0489,
+      "silent": false
+    },
+    "limits": "这是信号级证据，证明合成链路不是静音；音色、音量平衡与段落可辨性仍需人耳判断，本轮未做。"
+  },
+  "humanRequired": [
+    "音色与音量平衡的主观听感：需要人耳试听",
+    "中文文案语感与角色口吻：需要编辑判断"
+  ],
+  "versions": [
+    {
+      "tag": "v=6",
+      "change": "曲式时间轴与对位记账修复后的资源版本"
+    },
+    {
+      "tag": "v=7",
+      "change": "试听按钮空内容反馈、tone 非有限音高保护"
+    },
+    {
+      "tag": "v=8",
+      "change": "顶栏校记分母动态化、结局文案六页，当前版本"
+    }
+  ],
+  "distribution": {
+    "quarry": {
+      "rooms": 5,
+      "playable": 3,
+      "teachOnly": 2
+    },
+    "masonry": {
+      "rooms": 6,
+      "playable": 4,
+      "teachOnly": 2
+    },
+    "hall": {
+      "rooms": 4,
+      "playable": 2,
+      "teachOnly": 2
+    },
+    "works": {
+      "rooms": 4,
+      "playable": 3,
+      "teachOnly": 1
+    },
+    "frontier": {
+      "rooms": 3,
+      "playable": 2,
+      "teachOnly": 1
+    },
+    "market": {
+      "rooms": 2,
+      "playable": 1,
+      "teachOnly": 1
+    },
+    "total": {
+      "rooms": 24,
+      "playable": 15,
+      "teachOnly": 9
+    },
+    "note": "营造司只有加兰特图式一间仅讲解；诗文分析未做进房间。"
+  },
+  "ux": {
+    "problemBefore": "首屏只有标题与术语，没有目标、步骤、完成条件；试听与提交混排；未满足条件时点提交，部分房间只改角色台词，玩家看不到。",
+    "changedAfter": "每间固定四层：任务卡（目标/步骤/完成条件）、进度行（进度+下一步）、作答区、按钮区（先听材料/作答/提交验收）。侧栏常驻「怎么玩」，随时重开。",
+    "submitGating": "提交按钮旁常驻状态行；不满足时写明缺口与下一步，并在页边标记同步说明。",
+    "domEvidence": [
+      "r-c-major 任务卡：目标「在五度环上把 C 大调要用的七块石头选出来，再指出哪一块是主音。」；步骤 3 条；完成条件「七块石头正好是 C 大调那七块，主音定在 C。」",
+      "r-c-major 进度行：「已选 0 / 7 块石，主音未定」「下一步：在环上点石头，把要用的音选进来。」",
+      "r-c-major 提交空态：点呈交后状态行变「还差 7 块石：在环上继续点。」并加警示样式",
+      "r-cp1 任务卡：目标「给下面这条固定旋律补一条上方的第二声部，一个音对一个音。」；进度「已放 0 / 10 个音」；提交提示「还差 10 个音才能呈交」",
+      "按钮分组实测：对位房 先听材料 2 个、作答 1 个、提交验收 1 个；拼音阶房 1/1/1",
+      "「怎么玩」弹层同时给出目标、步骤、完成条件与该玩法的操作说明"
+    ],
+    "layout": "1280 宽下拼音阶房间左任务卡右环，提交按钮 bottom=637 在 720 视口内；768 宽下对位房提交按钮 bottom=669、拼音阶 857，均在 1024 视口内，横向溢出为 0。",
+    "matrixRerun": "新界面下重跑 15 间，全部 cleared，终页正常出现。"
+  },
+  "landing": {
+    "problemBefore": "打开就是地图，没有落地页；新玩家不知道这是什么、自己是谁、总目标是什么。",
+    "page": "落地页：一句话说明用听拼补判断学乐理；写明身份（记谱学徒）、总目标（走完六城区集齐六页校记）、五类动作的大白话解释；声音提示写明不自动播放；主 CTA 开始/继续旅程；重新开始需二次确认；六城区预览显示已校数。",
+    "domEvidence": [
+      "h1 只有 1 个，文案「五度环」",
+      "lead：「用听、拼、补、判断，把一本开源乐理教材走成一座城。每一条规则都能当场听见，也能当场判对错。」",
+      "身份：「你是记谱学徒，在记谱公会当差。名字不写在谱上……」",
+      "总目标：「走完六个城区，集齐六页校记。」",
+      "五类动作 5 条，各自一句大白话",
+      "声音：「建议戴耳机。页面不会自动发声，第一次点按钮之后浏览器才会解锁音频。」",
+      "CTA 首访「开始旅程」，有存档「继续旅程」",
+      "确认条：「这会清掉所有校记和进度，不能撤销。 确定清除 取消」"
+    ]
+  },
+  "journey": {
+    "matrix": [
+      {
+        "step": 1,
+        "action": "无存档打开",
+        "expected": "落地页 + 开始旅程",
+        "actual": "落地页，CTA=开始旅程，h1=1，5 动作，6 城区",
+        "pass": true
+      },
+      {
+        "step": 2,
+        "action": "点开始旅程",
+        "expected": "进地图并记 started",
+        "actual": "地图，started=true，savedView=map",
+        "pass": true
+      },
+      {
+        "step": 3,
+        "action": "完成十二块石头并回地图",
+        "expected": "地图显示 1/3",
+        "actual": "cleared=[r-c-major]，采石场 1/3，校记 0/6",
+        "pass": true
+      },
+      {
+        "step": 4,
+        "action": "整页刷新",
+        "expected": "仍在地图",
+        "actual": "仍在 map，进度保留",
+        "pass": true
+      },
+      {
+        "step": 5,
+        "action": "地图点首页",
+        "expected": "落地页且 CTA=继续旅程、进度不丢",
+        "actual": "落地页，CTA=继续旅程，cleared 保留，采石场显示已校 1",
+        "pass": true
+      },
+      {
+        "step": 6,
+        "action": "点重新开始",
+        "expected": "展开确认条，不清数据",
+        "actual": "确认条出现，文案含不能撤销；cleared 仍为 [r-c-major]",
+        "pass": true
+      },
+      {
+        "step": 7,
+        "action": "点取消",
+        "expected": "确认条收起，进度保留",
+        "actual": "确认条 display=none，进度保留",
+        "pass": true
+      },
+      {
+        "step": 8,
+        "action": "再点重新开始并确定清除",
+        "expected": "清空并回落地页、CTA=开始旅程",
+        "actual": "cleared=0，CTA=开始旅程，停留落地页",
+        "pass": true
+      },
+      {
+        "step": 9,
+        "action": "清除后刷新",
+        "expected": "仍是落地页",
+        "actual": "落地页，CTA=开始旅程",
+        "pass": true
+      },
+      {
+        "step": 10,
+        "action": "房间内放两个音后刷新",
+        "expected": "仍在原房间且音符保留",
+        "actual": "view=room，r-cp1，slots=[67,65,null]，屏上 12 个符头",
+        "pass": true
+      }
+    ],
+    "result": "10 / 10 通过"
+  },
+  "viewportChecks": [
+    {
+      "page": "landing",
+      "results": [
+        {
+          "w": 1280,
+          "h": 720,
+          "overflow": 0
+        },
+        {
+          "w": 1024,
+          "h": 768,
+          "overflow": 0,
+          "cta": [
+            430,
+            471
+          ]
+        },
+        {
+          "w": 768,
+          "h": 1024,
+          "overflow": 0,
+          "cta": [
+            616,
+            657
+          ],
+          "actionCols": "2 列",
+          "districtCols": "2 列"
+        }
+      ]
+    },
+    {
+      "page": "compass @768",
+      "results": [
+        {
+          "w": 768,
+          "h": 1024,
+          "overflow": 0,
+          "ringW": 430,
+          "bust": "visible"
+        }
+      ]
+    }
+  ],
+  "avatar": {
+    "creator": "落地页内嵌纸偶定制，五组选项（体态/发型/肤色/衣服/符号），改一项即时更新预览，点「就这样」确认；确认前刷新会重新展开。",
+    "persistence": "定制值写入同一存档（avatar、avatarConfirmed），刷新保持；改形象只写存档，不动进度。",
+    "functions": [
+      "地图上贴在当前城区节点右下角，作为当前位置锚点",
+      "侧栏「让学徒提示」按三档给提示：重述目标 → 高亮区域 → 只示范第一步，不替玩家选值",
+      "六枚印记挂在化身旁，完成城区点亮"
+    ],
+    "hintEvidence": [
+      "第一档：「这一关要做的是：在五度环上把 C 大调要用的七块石头选出来，再指出哪一块是主音。」",
+      "第二档：「看这里：在环上点石头，把要用的音选进来。」并给环形区域加虚线高亮",
+      "第三档：「先做这一步：在环上点石头，把要用的音选进来。 具体选哪个，我不替你看。」"
+    ],
+    "domEvidence": "角色创建后 #landingAvatar 显示 .landing-av-row：头像 SVG、六个印记槽、「改形象」；地图 .map-avatar 有 1 个 SVG；房间 #avatarBust 有 1 个 SVG"
+  },
+  "marks": {
+    "six": [
+      "音阶",
+      "对位",
+      "和声",
+      "曲式",
+      "后调性",
+      "流行"
+    ],
+    "sync": "印记只在 seals[district] 为真时点亮；地图侧栏与终页读同一份 seals，不另存数值。",
+    "recordBeat": "拿到印记后第一次返回地图弹出「校记」：修正／保留／并记／留白，只记录选择，不影响判定；结果写入 records，终页逐条列出。"
+  },
+  "compass": {
+    "rooms": [
+      "最短的路 C→A（3 步，显示剩余步数）",
+      "绕道关系调 C→f♯ 小调（4 步，不显示剩余步数）"
+    ],
+    "verb": "在五度圈上走一步；同一块石头可翻面成关系调",
+    "judge": "先算最短步数，再比对实际步数；多条等长路线都通过；走多时报出第几步开始离目标变远",
+    "evidence": [
+      "C→F→C→G→D→A 走 5 步到达，判「最少 3 步，你走了 5 步。第 1 步开始走远：从 C 大调 到 F 大调 之后，离目标反而更远。」",
+      "重走后 C→G→D→A 三步通过，弹「最短的路 · 到了」，正文「从 C 大调 走到 A 大调，3 步，一步没多。」",
+      "绕道关系调：C 翻面到 a 小调（1 步），再 e、b、f♯ 共四步通过",
+      "每步播放旧主和弦与新主和弦两段音频"
+    ]
+  },
+  "ending": {
+    "personalised": "终页显示化身、个人符号印章、六枚印记、六个城区的校记选择，以及姓名输入与「留白」按钮；留白写入「（留白）」。",
+    "regression": "原有结局文案保留；署名后仍可回环城。"
+  }
+}
