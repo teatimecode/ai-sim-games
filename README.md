@@ -10,4 +10,21 @@
 
 各目录的启动方式与测试方法写在该目录自己的 README 里。
 
-浏览器模拟经营游戏合集。每个游戏独立目录、独立运行，无需构建步骤。
+## GitHub Pages
+
+站点由 `.github/workflows/deploy-pages.yml` 在 `main` 更新时自动构建并部署：
+
+- `/`：游戏选择页
+- `/games/fifths-ring/`：五度环
+- `/games/aircraft-manufacturer/`：适航
+
+本地预览打包后的 Pages 站点：
+
+```bash
+bash scripts/build-pages.sh
+python3 -m http.server 8000 --directory dist
+```
+
+然后访问 <http://localhost:8000/>。构建产物 `dist/` 不提交到 Git，由 GitHub Actions 直接上传到 GitHub Pages。仓库 Pages 的 **Source** 需要设置为 **GitHub Actions**。
+
+浏览器模拟经营游戏合集。每个游戏独立目录、独立运行，无需前端依赖安装。

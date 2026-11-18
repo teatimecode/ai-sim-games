@@ -1,0 +1,56 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The game repositories keep their own deeper QA scripts. Pages deployment
+      # deliberately performs packaging and link checks only, so publishing cannot
+      # hang on sandbox-oriented browser harnesses.
+      - name: Build static Pages artifact
+        run: bash scripts/build-pages.sh
+
+      - name: Check required entry points
+        run: |
+          test -f dist/index.html
+          test -f dist/games/fifths-ring/index.html
+          test -f dist/games/fifths-ring/game.js
+          test -f dist/games/aircraft-manufacturer/index.html
+          test -f dist/games/aircraft-manufacturer/ui.js
+          ! grep -R -E '(src|href)="/' dist --include='*.html'
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

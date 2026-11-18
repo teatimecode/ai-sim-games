@@ -7,3 +7,6 @@ __pycache__/
 # 本地运行产物
 *.sqlite
 *.db
+
+# 自动生成的 GitHub Pages 站点
+/dist/
