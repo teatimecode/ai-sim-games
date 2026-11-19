@@ -88,14 +88,14 @@ button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer
 .legend-strip .sp{margin-left:auto}
 
 /* ---------- 决议 ---------- */
-.acts{flex:1;min-height:0}
+.acts{flex:1;min-height:0;overflow:hidden}
 .tabs{display:flex;border-bottom:1px solid var(--ink-20);flex:0 0 auto}
 .tabs button{flex:1;padding:7px 4px;font-size:10.5px;letter-spacing:.06em;color:var(--ink-40);border-right:1px solid var(--ink-10);position:relative}
 .tabs button:last-child{border-right:0}
 .tabs button.on{color:var(--ink);background:var(--panel2);box-shadow:inset 0 -2px 0 var(--ink)}
 .tabs button .dot{position:absolute;top:5px;right:8px;width:5px;height:5px;background:var(--amber);border-radius:50%}
 .tabbody{padding:10px 12px;overflow:auto;flex:1;min-height:0}
-.hintbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(176,112,28,.07);border-bottom:1px solid var(--ink-10);font-size:10.5px;color:var(--amber);letter-spacing:.02em}
+.hintbar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(176,112,28,.07);border-bottom:1px solid var(--ink-10);font-size:10.5px;color:var(--amber);letter-spacing:.02em}
 .hintbar b{font-weight:500}
 .hintbar .x{margin-left:auto;color:var(--ink-40);font-size:11px}
 
@@ -385,10 +385,27 @@ button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer
 .cpchip.wait b{color:var(--ink-40)}
 
 .tools button.on{border-color:var(--ink);background:var(--ink);color:var(--paper)}
-.guide{border-bottom:1px solid var(--ink-10);background:rgba(30,111,120,.045);padding:6px 10px 7px}
+.guide{flex:0 0 auto;border-bottom:1px solid var(--ink-10);background:rgba(30,111,120,.045);padding:6px 10px 7px}
 .guide .gh{display:flex;justify-content:space-between;font-size:8.5px;letter-spacing:.1em;color:var(--ink-40);margin-bottom:3px}
 .gitem{display:flex;gap:6px;font-size:10px;line-height:1.55;color:var(--ink-70)}
 .gitem .gnum{width:12px;color:var(--teal);font-family:var(--mono);font-size:9px;flex:0 0 12px}
 .gtext b{font-weight:500;color:var(--ink)}
 .gtext em{font-style:normal;color:var(--ink-40);margin-left:5px;font-size:9px}
 .guide .btn{margin-top:4px}
+
+/* 序章插图 */
+.proart{height:186px;background:var(--panel2);border-bottom:1px solid var(--ink-10);padding:8px 12px;position:relative}
+.proart::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(22,34,43,.05) 1px,transparent 1px);background-size:3px 3px;opacity:.6}
+
+/* 新手目标条 */
+.tutorial{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;margin-top:8px;
+  border:1px solid var(--ink-20);border-left:3px solid var(--amber);background:rgba(176,112,28,.06)}
+.tutorial .tt{font-size:9.5px;letter-spacing:.14em;color:var(--amber);white-space:nowrap}
+.tutorial .tg{display:flex;gap:8px;flex-wrap:wrap;flex:1}
+.tutorial .ti{font-size:10.5px;color:var(--ink-55);display:inline-flex;gap:5px;align-items:baseline}
+.tutorial .ti.on{color:var(--ink-55);text-decoration:line-through;text-decoration-color:rgba(22,34,43,.25)}
+.tutorial .ti.on::first-letter{color:var(--teal)}
+.tutorial .tp{font-size:9.5px;color:var(--ink-40)}
+.tutorial .tx{font-size:9.5px;color:var(--ink-40);border:1px solid var(--ink-20);padding:2px 7px}
+.tutorial .tx:hover{border-color:var(--ink);color:var(--ink)}
+@media (max-width:720px){ .proart{height:132px} }

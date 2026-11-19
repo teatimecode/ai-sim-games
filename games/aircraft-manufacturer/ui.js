@@ -9,6 +9,7 @@
   let S = E.newGame();
   let tab = 'tech';
   let guided = true;
+  if (S && S.tutOn === undefined) S.tutOn = true;
   let dept = 'design';
   let seen = {};
 
@@ -53,10 +54,6 @@
   }
   function closeModal() {
     $('#mask').classList.add('hidden'); $('#mask').innerHTML = '';
-    if (S.story && S.story.type !== 'note' && !S.pending.story && !S.ending && storyShown !== S.turn) {
-      storyShown = S.turn;
-      showStory();
-    }
   }
   function modalOpen() { return !$('#mask').classList.contains('hidden'); }
 
@@ -86,22 +83,160 @@
           <p>两个选项的差别不在金额，在<b>你欠谁</b>：政府基金给得多，但绑了 25 架的交付承诺。</p>`
     }
   ];
+
+  /* ---------------- 序章插图（同一套线稿语言） ---------------- */
+  const ART_INK = 'fill="none" stroke="#16222B" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"';
+  const ART_HATCH = 'fill="none" stroke="#16222B" stroke-width=".7" stroke-opacity=".28"';
+  const ART_TEAL = 'fill="none" stroke="#1E6F78" stroke-width="1.2"';
+  const ART_AMBER = 'fill="none" stroke="#B0701C" stroke-width="1.2"';
+
+  function artWrap(inner, vb) {
+    return '<svg viewBox="' + (vb || '0 0 1000 360') + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block">' + inner + '</svg>';
+  }
+
+  const PROLOGUE_ART = {
+    yard: artWrap(
+      // 地平线与江面
+      '<path d="M0 214 L1000 214" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '>' +
+      '<path d="M0 238 L1000 238"/><path d="M0 252 L1000 252"/><path d="M0 266 L1000 266"/>' +
+      '<path d="M120 280 L300 280"/><path d="M420 292 L640 292"/><path d="M760 286 L920 286"/>' +
+      '</g>' +
+      // 厂房
+      '<path d="M90 214 L90 140 L300 140 L300 214" ' + ART_INK + '/>' +
+      '<path d="M90 140 L195 108 L300 140" ' + ART_INK + '/>' +
+      '<path d="M120 214 L120 168 L168 168 L168 214" ' + ART_INK + '/>' +
+      '<path d="M196 214 L196 168 L244 168 L244 214" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M126 180 L162 180"/><path d="M126 192 L162 192"/><path d="M202 180 L238 180"/><path d="M202 192 L238 192"/></g>' +
+      // 第二座厂房
+      '<path d="M330 214 L330 156 L520 156 L520 214" ' + ART_INK + '/>' +
+      '<path d="M330 156 L425 128 L520 156" ' + ART_INK + '/>' +
+      '<path d="M370 214 L370 176 L430 176 L430 214" ' + ART_INK + '/>' +
+      '<path d="M470 214 L470 186 L500 186 L500 214" ' + ART_INK + '/>' +
+      // 烟囱与塔吊
+      '<path d="M560 214 L560 116 L584 116 L584 214" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M560 132 L584 132"/><path d="M560 148 L584 148"/><path d="M560 164 L584 164"/></g>' +
+      '<path d="M700 214 L700 70 L706 70 L706 214" ' + ART_INK + '/>' +
+      '<path d="M600 86 L706 62" ' + ART_INK + '/>' +
+      '<path d="M706 62 L760 86" ' + ART_INK + '/>' +
+      '<path d="M760 86 L760 128" ' + ART_AMBER + '/>' +
+      '<path d="M706 62 L706 96" ' + ART_TEAL + '/>' +
+      // 远处天际线
+      '<g ' + ART_HATCH + '>' +
+      '<path d="M790 214 L790 190 L830 190 L830 214"/>' +
+      '<path d="M850 214 L850 176 L884 176 L884 214"/>' +
+      '<path d="M900 214 L900 196 L950 196 L950 214"/>' +
+      '</g>' +
+      // 晨雾
+      '<g ' + ART_HATCH + '><path d="M40 120 L240 120"/><path d="M540 150 L700 150"/><path d="M300 96 L520 96"/></g>' +
+      '<text x="40" y="330" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">EARLY MORNING · RIVERSIDE WORKS</text>', '0 30 1000 320'),
+    shop: artWrap(
+      // 屋顶桁架
+      '<g ' + ART_HATCH + '>' +
+      '<path d="M0 60 L1000 60"/><path d="M0 96 L1000 96"/>' +
+      '<path d="M60 60 L100 96 L140 60 L180 96 L220 60 L260 96 L300 60 L340 96 L380 60 L420 96"/>' +
+      '<path d="M460 60 L500 96 L540 60 L580 96 L620 60 L660 96 L700 60 L740 96 L780 60 L820 96 L860 60 L900 96 L940 60"/>' +
+      '</g>' +
+      // 行车
+      '<path d="M120 60 L120 132 L860 132 L860 60" ' + ART_INK + '/>' +
+      '<rect x="470" y="132" width="46" height="26" ' + ART_INK + '/>' +
+      '<path d="M493 158 L493 196" ' + ART_INK + '/>' +
+      '<path d="M470 196 L516 196" ' + ART_INK + '/>' +
+      // 型架
+      '<path d="M180 300 L180 210 L360 210 L360 300" ' + ART_INK + '/>' +
+      '<path d="M620 300 L620 210 L800 210 L800 300" ' + ART_INK + '/>' +
+      // 机身筒段
+      '<ellipse cx="420" cy="244" rx="46" ry="58" ' + ART_INK + '/>' +
+      '<path d="M466 200 L600 208 L600 280 L466 288" ' + ART_TEAL + '/>' +
+      '<ellipse cx="600" cy="244" rx="26" ry="36" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '>' +
+      '<path d="M400 196 L400 292"/><path d="M430 190 L430 298"/><path d="M460 188 L460 300"/>' +
+      '<path d="M500 200 L500 288"/><path d="M540 204 L540 284"/>' +
+      '</g>' +
+      // 工人剪影
+      '<g fill="#16222B" fill-opacity=".55" stroke="none">' +
+      '<circle cx="300" cy="264" r="7"/><path d="M293 272 h14 v26 h-14 z"/>' +
+      '<circle cx="676" cy="268" r="7"/><path d="M669 276 h14 v24 h-14 z"/>' +
+      '<circle cx="712" cy="272" r="6"/><path d="M706 279 h12 v21 h-12 z"/>' +
+      '</g>' +
+      // 地面
+      '<path d="M0 300 L1000 300" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M0 316 L1000 316"/><path d="M60 330 L240 330"/><path d="M700 330 L880 330"/></g>' +
+      '<text x="40" y="348" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BAY 01 · FUSELAGE SECTION ON JIG</text>', '0 30 1000 330'),
+    board: artWrap(
+      // 房间轮廓
+      '<path d="M60 60 L940 60 L940 300 L60 300" ' + ART_INK + '/>' +
+      // 白板
+      '<rect x="120" y="86" width="420" height="150" ' + ART_INK + '/>' +
+      '<path d="M150 200 L500 200" ' + ART_INK + '/>' +
+      '<g ' + ART_AMBER + '>' +
+      '<path d="M170 200 L170 184"/><path d="M240 200 L240 176"/><path d="M310 200 L310 180"/>' +
+      '<path d="M380 200 L380 172"/><path d="M450 200 L450 178"/>' +
+      '</g>' +
+      '<g ' + ART_HATCH + '>' +
+      '<path d="M150 124 L330 124"/><path d="M150 140 L280 140"/><path d="M150 156 L360 156"/>' +
+      '<path d="M470 124 L500 124"/><path d="M470 140 L500 140"/>' +
+      '</g>' +
+      // 长桌（透视）
+      '<path d="M120 300 L200 240 L780 240 L860 300 Z" ' + ART_INK + '/>' +
+      '<path d="M200 240 L120 300" ' + ART_INK + '/>' +
+      '<path d="M780 240 L860 300" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M260 252 L740 252"/><path d="M220 276 L780 276"/></g>' +
+      // 椅子
+      '<g ' + ART_INK + '>' +
+      '<path d="M300 240 L300 210 L340 210 L340 240"/>' +
+      '<path d="M440 240 L440 206 L480 206 L480 240"/>' +
+      '<path d="M580 240 L580 210 L620 210 L620 240"/>' +
+      '</g>' +
+      // 窗
+      '<rect x="640" y="86" width="240" height="110" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M760 86 L760 196"/><path d="M640 141 L880 141"/></g>' +
+      '<path d="M660 196 L660 170 L700 170 L700 196" ' + ART_TEAL + '/>' +
+      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BOARD ROOM · 18 QUARTERS</text>', '0 40 1000 310'),
+    runway: artWrap(
+      // 天空与地平线
+      '<path d="M0 196 L1000 196" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M80 150 L300 150"/><path d="M420 128 L620 128"/><path d="M700 160 L900 160"/></g>' +
+      // 跑道透视
+      '<path d="M300 196 L120 330" ' + ART_INK + '/>' +
+      '<path d="M700 196 L880 330" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '>' +
+      '<path d="M340 210 L660 210"/><path d="M330 236 L670 236"/><path d="M316 264 L684 264"/><path d="M300 296 L700 296"/>' +
+      '</g>' +
+      '<g ' + ART_TEAL + '>' +
+      '<path d="M500 300 L500 322"/><path d="M500 254 L500 278"/><path d="M500 214 L500 234"/>' +
+      '</g>' +
+      // 塔台
+      '<path d="M790 196 L790 120 L830 120 L830 196" ' + ART_INK + '/>' +
+      '<path d="M778 120 L842 120 L842 104 L778 104 Z" ' + ART_INK + '/>' +
+      '<g ' + ART_HATCH + '><path d="M784 110 L836 110"/></g>' +
+      // 飞机（远处，起飞姿态）
+      '<g transform="translate(470,176) rotate(-7)">' +
+      '<path d="M-46 0 L40 -4 L58 0 L40 4 L-46 0 Z" fill="#16222B" fill-opacity=".75" stroke="none"/>' +
+      '<path d="M-6 -2 L-24 -22 L-14 -22 L8 -2 Z" fill="#16222B" fill-opacity=".6" stroke="none"/>' +
+      '<path d="M-6 2 L-24 22 L-14 22 L8 2 Z" fill="#16222B" fill-opacity=".6" stroke="none"/>' +
+      '<path d="M42 -2 L52 -14 L56 -14 L50 -2 Z" fill="#16222B" fill-opacity=".6" stroke="none"/>' +
+      '</g>' +
+      '<g ' + ART_AMBER + '><path d="M410 190 L470 186"/><path d="M566 184 L620 190"/></g>' +
+      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">FIRST FLIGHT · 42 MINUTES</text>', '0 66 1000 286')
+  };
+
   let prologuePick = { seat: 'main', route: 'clean' };
   const PROLOGUE = [
-    { t: '北辰航空 · 三十七年',
+    { t: '北辰航空 · 三十七年', art: 'yard',
       b: `<p>北辰航空在长江边的一个工业区里，两千一百人。三十七年前它靠修理涡桨飞机起家，后来自己造了一款 42 座的支线涡桨，厂区墙上还挂着那张发黄的下线照片。</p>
           <p>你在这家厂干了十九年，从结构组的绘图员做到型号总师办公室。你负责过三个改型项目，没有一个让你真正兴奋过。</p>` },
-    { t: '一款还在卖、但已经在退场的飞机',
+    { t: '一款还在卖、但已经在退场的飞机', art: 'shop',
       b: `<p>P-7 涡桨是公司的现金牛：便宜、皮实、能上碎石跑道。但过去五年，它的市场在以每年 6% 的速度萎缩——支线航司都在换喷气，因为乘客不愿意在 500 公里的航段上多花四十分钟。</p>
           <p>董事会的判断很直接：<b>再不改，五年后这家厂就只剩维修业务。</b></p>` },
     { t: '这个行业只有三个位置',
       b: `<p>干线窄体市场被两家吃掉八成：巨杉航空靠规模和全球服务网，欧陆联合靠机型族谱和产能。第三极是东方商用，靠国家意志硬撑一条产线在爬坡。</p>
           <p>剩下的缝隙有两个：一是 100 座上下、被两家都不太在意的支线喷气；二是 130 座级，正面撞上去，但量大。</p>
           <p><b>你要选一个位置站进去。</b></p>` },
-    { t: '前任总师老周',
+    { t: '前任总师老周', art: 'shop',
       b: `<p>老周在这个位子上坐了六年，去年被换掉。原因是 P-7 的一次改型延期了七个月，客户退了四架。</p>
           <p>他走的那天把一本笔记本留在抽屉里。第一页写着：<b>不要在设计没冻结的时候开始做工装。</b> 你后来才知道这句话让公司赔过一笔钱。</p>` },
-    { t: '董事会给了你十八个季度',
+    { t: '董事会给了你十八个季度', art: 'board',
       b: `<p>会议室的白板上画着一条时间线：第 18 个季度末，累计交付 25 架。做不到，这个型号降级成技术验证机，团队打散。</p>
           <p>你手里有一条总装线、五个部门、两亿现金，和一张还没冻结的图纸。</p>` },
     { t: '你的五个部门',
@@ -124,9 +259,11 @@
     const body = p.choice
       ? `<p>${p.b || ''}</p>` + p.opts.map((o) => `<div class="choice" data-pick="${p.choice}" data-val="${o.k}"><h4>${o.h}</h4><p>${o.d}</p></div>`).join('')
       : p.b;
+    const art = p.art && PROLOGUE_ART[p.art] ? `<div class="proart">${PROLOGUE_ART[p.art]}</div>` : '';
     openModal(`
       <header><span class="t">${esc(p.t)}</span><span class="m">序章 ${i + 1} / ${PROLOGUE.length}</span></header>
       <div class="steps">${PROLOGUE.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
+      ${art}
       <div class="body">${body}</div>
       <footer>${p.choice ? '<span style="font-size:9.5px;color:var(--ink-40);align-self:center;margin-right:auto">选完继续</span>' : ''}
         <button class="btn" id="proNext">${i < PROLOGUE.length - 1 ? '继续' : '开始立项'}</button></footer>`);
@@ -139,6 +276,7 @@
   }
   function finishPrologue() {
     S = E.newGame({ seed: S.seed, seat: prologuePick.seat, route: prologuePick.route });
+    S.tutOn = true; beatShown = 0;
     closeModal();
     render();
     showOnboard(0);
@@ -573,6 +711,42 @@
       </div>`;
   }
 
+  function tutorialGoals() {
+    const t = S.turn;
+    if (t === 1) return [
+      { t: '在右上方选一个融资方案', on: !!S.finance, go: null },
+      { t: '到「技术流程」把五个部门的产能派出去', on: Object.keys(S.pending.assign).length > 0, go: 'tech' },
+      { t: '点「提交本季」结束第一季', on: false, go: null }
+    ];
+    if (t === 2) return [
+      { t: '到「采购」锁定第一批发动机（12–24 台）', on: S.engineOrders.length > 0 || S.engines > 0, go: 'buy' },
+      { t: '继续派工，然后提交', on: Object.keys(S.pending.assign).length > 0, go: 'tech' }
+    ];
+    if (t === 3) return [
+      { t: '到「商务」接下第一张订单', on: S.slots.length > 0, go: 'biz' },
+      { t: '看一眼「本季建议」，它会告诉你还差什么', on: true, go: null }
+    ];
+    if (t === 4) return [
+      { t: '到「产线」投一次扩线（产能翻倍）', on: S.expandReady !== null || S.pending.expand, go: 'line' },
+      { t: '招一个人，让关键路径变短', on: S.hires > 0 || Object.keys(S.pending.hires).length > 0, go: 'tech' }
+    ];
+    return null;
+  }
+
+  function renderTutorial() {
+    const host = document.querySelector('.tutorial');
+    if (!host) return;
+    const goals = tutorialGoals();
+    if (!guided || !goals || S.ending || !S.tutOn) { host.style.display = 'none'; host.innerHTML = ''; return; }
+    host.style.display = '';
+    const done = goals.filter((g) => g.on).length;
+    host.innerHTML = `
+      <span class="tt">新手目标 · 第 ${S.turn} 季</span>
+      <span class="tg">${goals.map((g, i) => `<span class="ti ${g.on ? 'on' : ''}">${g.on ? '✓' : i + 1} ${esc(g.t)}</span>`).join('')}</span>
+      <span class="tp mono">${done}/${goals.length}</span>
+      <button class="tx" data-tut="off" title="关闭新手引导">知道了</button>`;
+  }
+
   function renderFoot() {
     if (S.ending) {
       $('.check').innerHTML = `<span class="chk on"><i>✓</i>本局结束：${esc(S.ending.title)}</span>
@@ -597,17 +771,31 @@
   }
 
   function render() {
-    renderHud(); renderLine(); renderActions(); renderOrders(); renderGates(); renderEvent(); renderLast(); renderFoot();
+    renderHud(); renderTutorial(); renderLine(); renderActions(); renderOrders(); renderGates(); renderEvent(); renderLast(); renderFoot();
     $('.commit').disabled = !!S.ending || modalOpen();
   }
 
+  function maybeShowBeat() {
+    if (S.story && !S.ending && beatShown !== S.turn && !modalOpen()) {
+      beatShown = S.turn;
+      showStory();
+    }
+  }
+
   /* ---------------- 弹窗 ---------------- */
+  const BEAT_ART = { firstflight: 'runway', visit: 'yard', notebook: 'shop', board: 'board' };
+  function beatArt(id) {
+    const k = BEAT_ART[id];
+    return k && PROLOGUE_ART[k] ? `<div class="proart">${PROLOGUE_ART[k]}</div>` : '';
+  }
+
   function showStory() {
     const st = S.story;
     if (!st) return;
     if (st.type === 'note') {
       openModal(`
         <header><span class="t">${esc(st.title)}</span><span class="m">情节 · 第 ${S.turn} 季</span></header>
+        ${beatArt(st.id)}
         <div class="body">
           <p>${esc(st.text)}</p>
           ${st.note ? `<div class="attr">${esc(st.note)}</div>` : ''}
@@ -617,6 +805,7 @@
     }
     openModal(`
       <header><span class="t">${esc(st.title)}</span><span class="m">现场抉择 · 第 ${S.turn} 季</span></header>
+      ${beatArt(st.id)}
       <div class="body">
         <p>${esc(st.text)}</p>
         <div class="choice" data-story="a">
@@ -658,7 +847,7 @@
   }
 
   let codexSel = null;
-  let storyShown = 0;
+  let beatShown = 0;
   function showCodex(id) {
     const list = window.CODEX || [];
     if (!list.length) {
@@ -803,7 +992,12 @@
         ${notes ? `<h3>本季发生了什么</h3>${notes}` : ''}
       </div>
       <footer><button class="btn" id="settleNext">${S.ending ? '看结项' : '进入第 ' + (r.turn + 1) + ' 季'}</button></footer>`);
-    $('#settleNext').onclick = () => { closeModal(); if (S.ending) showEnding(); render(); };
+    $('#settleNext').onclick = () => {
+      closeModal();
+      if (S.ending) { showEnding(); return; }
+      render();
+      maybeShowBeat();
+    };
   }
 
   function showEnding() {
@@ -849,7 +1043,7 @@
     showSettlement(r);
   }
   function restart() {
-    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {};
+    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {}; S.tutOn = true; beatShown = 0;
     render();
     showOnboard(0);
   }
@@ -870,7 +1064,8 @@
     if (t.dataset.assist === 'auto') { E.autoAssign(S); render(); return toast('已按关键路径自动派工，你可以继续调整。'); }
     if (t.dataset.codex) return showCodex(t.dataset.codex);
     if (t.dataset.story) { E.setStory(S, t.dataset.story); closeModal(); render(); return; }
-    if (t.dataset.toggle === 'guide') { guided = !guided; render(); return; }
+    if (t.dataset.toggle === 'guide') { guided = !guided; S.tutOn = guided; render(); return; }
+    if (t.dataset.tut === 'off') { S.tutOn = false; render(); return; }
     if (t.dataset.run === 'all') {
       let n = 0;
       E.suggest(S).forEach((g) => { try { if (g.run(S)) n += 1; } catch (e) { /* 忽略 */ } });
