@@ -407,6 +407,91 @@ ok('rhythm has no drag dependency', src.indexOf('dragstart') === -1);
 
 ok('record beat hands over to the ending', src.indexOf('if (endingEligible() && !state.signed) setTimeout(showEnding, 320);') !== -1);
 
+/* ---------- 17. 音频状态机（可注入 mock） ---------- */
+function mockCtor(opts) {
+  opts = opts || {};
+  function Ctx() {
+    if (opts.throwOnCreate) throw new Error('boom');
+    this.state = opts.initial || 'suspended';
+    this.ls = [];
+    Ctx.instances.push(this);
+  }
+  Ctx.instances = [];
+  Ctx.prototype.addEventListener = function (ev, fn) { this.ls.push(fn); };
+  Ctx.prototype.resume = function () {
+    var self = this;
+    if (opts.resumeReject) return { then: function (ok, err) { var e = new Error('blocked'); e.name = 'NotAllowedError'; err(e); } };
+    return { then: function (ok) { self.state = 'running'; ok(); } };
+  };
+  Ctx.prototype.fire = function (s) { this.state = s; this.ls.forEach(function (f) { f(); }); };
+  return Ctx;
+}
+
+const A1 = mockCtor({});
+const c1 = m.createAudioController({ Ctor: A1, now: (function () { var t = 1000; return function () { return ++t; }; })() });
+c1.init();
+ok('audio: starts at needs-gesture', c1.state.state === 'needs-gesture');
+const ctx1 = c1.unlock();
+ok('audio: unlock creates a context', !!ctx1 && c1.state.created === 1);
+ok('audio: resume success becomes ready', c1.state.state === 'ready');
+ok('audio: enable time is recorded', c1.state.lastEnabledAt > 0);
+c1.unlock();
+ok('audio: repeated unlock does not create another context', c1.state.created === 1);
+
+const A2 = mockCtor({ resumeReject: true });
+const c2 = m.createAudioController({ Ctor: A2 });
+c2.init(); c2.unlock();
+ok('audio: resume rejection becomes failed', c2.state.state === 'failed');
+ok('audio: failure keeps a safe summary', /resume:/.test(c2.state.lastError || '') && (c2.state.lastError || '').indexOf('NotAllowedError') !== -1);
+
+const A3 = mockCtor({});
+const c3 = m.createAudioController({ Ctor: A3 });
+c3.init();
+c3.unlock();
+const ctx3 = A3.instances[0];
+ctx3.fire('suspended');
+ok('audio: statechange suspended is reflected', c3.state.state === 'suspended');
+ctx3.fire('interrupted');
+ok('audio: interrupted is treated as suspended', c3.state.state === 'suspended');
+ctx3.fire('closed');
+ok('audio: closed is treated as failed', c3.state.state === 'failed');
+
+const A4 = mockCtor({ throwOnCreate: true });
+const c4 = m.createAudioController({ Ctor: A4 });
+c4.init();
+ok('audio: constructor throw returns null', c4.unlock() === null);
+ok('audio: constructor throw is recorded', c4.state.state === 'failed' && /create:/.test(c4.state.lastError || ''));
+
+const c5 = m.createAudioController({ Ctor: undefined });
+c5.init();
+ok('audio: unsupported is detected', c5.state.state === 'unsupported');
+ok('audio: unsupported unlock returns null', c5.unlock() === null);
+
+const A6 = mockCtor({ initial: 'running' });
+const c6 = m.createAudioController({ Ctor: A6 });
+c6.init();
+c6.unlock();
+ok('audio: already-running context goes straight to ready', c6.state.state === 'ready');
+
+c1.markTested();
+ok('audio: test time recorded and hearing resets', c1.state.lastTestAt > 0 && c1.state.heard === null);
+c1.markHeard('no');
+ok('audio: hearing can be recorded as no', c1.state.heard === 'no');
+c1.markHeard('yes');
+ok('audio: hearing can be recorded as yes', c1.state.heard === 'yes');
+
+const c7 = m.createAudioController({ Ctor: mockCtor({}) });
+c7.init();
+ok('audio: refresh without a context keeps needs-gesture', c7.refresh().state === 'needs-gesture');
+
+/* 静态扫描：没有外部音频文件或 CDN 依赖 */
+const fullSrc = src + html;
+ok('audio: no <audio> element', fullSrc.indexOf('<audio') === -1);
+ok('audio: no audio file references', !/\.(mp3|wav|ogg|m4a|aac)\b/i.test(fullSrc));
+ok('audio: no audio fetch', !/fetch\([^)]*\.(mp3|wav|ogg)/i.test(fullSrc));
+ok('audio: single audio gate', src.indexOf('function ensureAudio()') !== -1 && src.indexOf('audioCtl.unlock()') !== -1);
+ok('audio: no second AudioContext creation', (src.match(/new Ctor\(\)/g) || []).length === 1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

@@ -1,7 +1,7 @@
 # node tests/check.js
-run_at_utc: 2026-11-18T09:05:36Z
+run_at_utc: 2026-11-19T02:49:35Z
 node: v22.19.0
 cwd: games/fifths-ring
 ---
-passed: 550  failed: 0
+passed: 574  failed: 0
 exit_code: 0

@@ -6,7 +6,7 @@
   "scope": "6 城区、27 房间；19 个可玩、8 个仅讲解",
   "automated": {
     "command": "node tests/check.js",
-    "result": "passed: 550  failed: 0",
+    "result": "passed: 574  failed: 0",
     "covers": [
       "房间与教程卡完整性（每间都有标题、要点、原文引用与出处）",
       "对位四关回溯求解均有解，示范解法与判定一致",
@@ -27,7 +27,8 @@
       "六枚印记与城区一一对应；化身定制五组选项；三档提示与四选校记的源码守卫",
       "随机化身：同种子同形象、五个维度都在合法区间、500 个种子全部合法且有多样性、定制不再拦首次进入",
       "节奏桥梁：时值算术、未填满/溢出/跨组界/缺落音四类错误、等价解、试听门禁",
-      "结局资格改为六区印记齐，旧存档不因新增房间被撤销"
+      "结局资格改为六区印记齐，旧存档不因新增房间被撤销",
+      "音频状态机：不支持、初始待手势、resume 成功/拒绝、构造异常、statechange 到 suspended/interrupted/closed、重复解锁只建一个上下文"
     ],
     "log": "qa/test-run.log",
     "runAt": "2026-11-13T04:16:37Z",
@@ -129,7 +130,8 @@
     "加兰特图式与诗文分析仍是仅讲解，不在可玩范围。",
     "化身与提示只做了 1280 与 768 两档检查，未做触屏手势。",
     "随机化身的观感与文案仍需人工判断；测试只验证合法性与可复现性。",
-    "节奏房的听感（打击音色是否好辨、断点是否听得出来）未人耳验证，只有信号级证据。"
+    "节奏房的听感（打击音色是否好辨、断点是否听得出来）未人耳验证，只有信号级证据。",
+    "真实移动浏览器（iOS Safari / Android Chrome）未测；桌面 headless 只证明状态机与信号调度。"
   ],
   "ruleCoverage": {
     "engine": "judge / harmonyIssues / orderFrom / minSpanOf / commonTonesOf / formJudge 均为纯函数，可在 node 内复算",
@@ -636,5 +638,29 @@
     "decision": "印记粘性：新增房间不撤销已有印记；终局资格改为「六个城区都有印记」",
     "implementation": "endingEligible(state) 只看 seals；passRoom 仍按城区全清发印记",
     "test": "endingEligible 覆盖全齐/缺一/旧档 cleared 为空三种情况"
+  },
+  "audio": {
+    "synthesis": "全部声音由 Web Audio 实时合成；静态扫描确认 index.html 与 game.js 无 <audio>、无 mp3/wav/ogg 引用、无音频 fetch；浏览器网络记录只有 html/css/js。",
+    "states": [
+      "undetected",
+      "needs-gesture",
+      "starting",
+      "ready",
+      "suspended",
+      "unsupported",
+      "failed"
+    ],
+    "gate": "所有发声入口统一走 ensureAudio() → audioCtl.unlock()，只创建一个 AudioContext；首次点击即调度并发声",
+    "evidence": [
+      "初始 chip「声音·待启用」，aria-live 播报「声音状态：待启用」",
+      "诊断面板显示 Web Audio 支持、上下文未创建、创建次数 0、最近错误无",
+      "点「启用声音」→ 状态变「声音·可用」，上下文 running，创建次数 1",
+      "点「测试声音」→ 记录测试时间，出现「我听到了 / 没听到」",
+      "选「没听到」→ 显示 5 条手机端排查建议",
+      "点「复制诊断」→ 剪贴板被拒时回退为可选文本框，内容无 UA、无存档",
+      "全新页面首次点「试听这组石」→ 28 个振荡器，上下文 running，无需第二次点击",
+      "768/1024/1280 横向溢出均为 0，诊断面板在视口内"
+    ],
+    "mobile": "真实手机未测，标为未验证"
   }
 }

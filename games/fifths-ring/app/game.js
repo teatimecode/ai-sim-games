@@ -334,13 +334,126 @@ function slotIsClean(level, slots, slot, pitch) {
 
 /* ================= 4. 音频 ================= */
 
+/* ================= 4a. 音频状态机 ================= */
+
+/* 只记录确实能检测到的事实，不推断设备静音、音量或输出路由。
+   状态：undetected | needs-gesture | starting | ready | suspended | unsupported | failed */
+function safeAudioError(e) {
+  var m = (e && (e.name || e.message)) || 'unknown';
+  return String(m).slice(0, 80);
+}
+
+function createAudioController(opts) {
+  opts = opts || {};
+  var Ctor = opts.Ctor;
+  var now = opts.now || function () { return Date.now(); };
+  var onState = opts.onState || function () {};
+  var c = {
+    ctx: null, state: 'undetected', created: 0,
+    lastEnabledAt: null, lastTestAt: null, heard: null,
+    lastError: null, gesture: false
+  };
+
+  function emit() { try { onState(c); } catch (e) { /* 渲染失败不影响音频 */ } }
+  function set(s, err) { c.state = s; if (err !== undefined) c.lastError = err; emit(); }
+
+  function init() {
+    if (!Ctor) { set('unsupported'); return c; }
+    if (c.state === 'undetected') set('needs-gesture');
+    return c;
+  }
+
+  function listen() {
+    if (!c.ctx || !c.ctx.addEventListener) return;
+    c.ctx.addEventListener('statechange', function () {
+      if (!c.ctx) return;
+      var s = c.ctx.state;
+      if (s === 'running') {
+        if (c.state !== 'ready') { c.lastEnabledAt = c.lastEnabledAt || now(); set('ready'); }
+      } else if (s === 'suspended' || s === 'interrupted') {
+        set('suspended');
+      } else if (s === 'closed') {
+        set('failed', 'closed');
+      }
+    });
+  }
+
+  /* 必须在真实用户手势里调用；创建一次，之后只做 resume */
+  function unlock() {
+    c.gesture = true;
+    if (!Ctor) { set('unsupported'); return null; }
+    if (!c.ctx) {
+      set('starting');
+      try {
+        c.ctx = new Ctor();
+        c.created++;
+        listen();
+      } catch (e) {
+        set('failed', 'create:' + safeAudioError(e));
+        return null;
+      }
+    }
+    if (c.ctx.state === 'running') {
+      c.lastEnabledAt = c.lastEnabledAt || now();
+      set('ready');
+      return c.ctx;
+    }
+    try {
+      var p = c.ctx.resume();
+      if (p && typeof p.then === 'function') {
+        p.then(function () {
+          if (c.ctx && c.ctx.state === 'running') { c.lastEnabledAt = now(); set('ready'); }
+          else set('suspended');
+        }, function (e) {
+          set('failed', 'resume:' + safeAudioError(e));
+        });
+      } else if (c.state === 'starting') {
+        set('suspended');
+      }
+    } catch (e) {
+      set('failed', 'resume:' + safeAudioError(e));
+    }
+    return c.ctx;
+  }
+
+  /* 从后台回来时重读状态，不主动播放 */
+  function refresh() {
+    if (!c.ctx) {
+      if (Ctor && c.state === 'undetected') set('needs-gesture');
+      return c;
+    }
+    var s = c.ctx.state;
+    if (s === 'running') {
+      if (c.state !== 'ready') { c.lastEnabledAt = c.lastEnabledAt || now(); set('ready'); }
+    } else if (s === 'suspended' || s === 'interrupted') {
+      if (c.state !== 'suspended') set('suspended');
+    } else if (s === 'closed') {
+      if (c.state !== 'failed') set('failed', 'closed');
+    }
+    return c;
+  }
+
+  function markTested() { c.lastTestAt = now(); c.heard = null; emit(); }
+  function markHeard(v) { c.heard = v; emit(); }
+
+  return { state: c, init: init, unlock: unlock, refresh: refresh, markTested: markTested, markHeard: markHeard };
+}
+
 var actx = null, masterGain = null, wetGain = null, reverb = null;
 
+var audioCtl = createAudioController({
+  Ctor: (typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : undefined),
+  onState: function () {
+    if (typeof renderAudioChip === 'function' && typeof document !== 'undefined' && document.getElementById && document.getElementById('audioChip')) renderAudioChip();
+  }
+});
+
+/* 所有发声入口的唯一门：创建或恢复上下文，失败时返回 null 并留下状态 */
 function ensureAudio() {
-  if (actx) { if (actx.state === 'suspended') actx.resume(); return actx; }
-  var AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  actx = new AC();
+  var c = audioCtl.unlock();
+  if (!c) return null;
+  actx = c;
+  if (masterGain) return actx;
   masterGain = actx.createGain();
   masterGain.gain.value = 0.85;
   var lp = actx.createBiquadFilter();
@@ -362,6 +475,200 @@ function ensureAudio() {
   reverb.connect(wetGain);
   wetGain.connect(lp);
   return actx;
+}
+
+
+/* ================= 4c. 音频状态与诊断 UI ================= */
+
+var AUDIO_TEXT = {
+  'undetected': '待检测',
+  'needs-gesture': '待启用',
+  'starting': '启用中',
+  'ready': '可用',
+  'suspended': '已暂停',
+  'unsupported': '不支持',
+  'failed': '异常'
+};
+
+function audioShort(st) { return AUDIO_TEXT[st] || '未知'; }
+function audioLabel(st) { return '声音·' + audioShort(st); }
+
+function renderAudioChip() {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  var chip = document.getElementById('audioChip');
+  if (!chip) return;
+  var st = audioCtl.state.state;
+  var txt = document.getElementById('audioChipText');
+  if (txt) txt.textContent = audioLabel(st);
+  chip.setAttribute('data-audio-state', st);
+  chip.setAttribute('aria-label', audioLabel(st) + '，点击查看声音诊断');
+  var live = document.getElementById('audioLive');
+  if (live) live.textContent = '声音状态：' + audioShort(st);
+}
+
+function fmtClock(ts) {
+  if (!ts) return '未记录';
+  var d = new Date(ts);
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+}
+
+function audioSupported() {
+  return !!(typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext));
+}
+
+function audioDiagText() {
+  var c = audioCtl.state;
+  return [
+    '五度环 · 声音诊断',
+    'Web Audio 支持：' + (audioSupported() ? '是' : '否'),
+    '状态：' + audioLabel(c.state),
+    '音频上下文：' + (c.ctx ? c.ctx.state : '未创建'),
+    '最近启用：' + fmtClock(c.lastEnabledAt),
+    '最近测试：' + fmtClock(c.lastTestAt),
+    '人耳确认：' + (c.heard === 'yes' ? '已听到' : c.heard === 'no' ? '未听到' : '未确认'),
+    '页面可见性：' + (typeof document !== 'undefined' ? document.visibilityState : '未知'),
+    '用户手势触发：' + (c.gesture ? '是' : '否'),
+    '创建上下文次数：' + c.created,
+    '最近错误：' + (c.lastError || '无'),
+    '说明：声音由浏览器 Web Audio 实时合成，无需下载音频文件。'
+  ].join('\n');
+}
+
+function playTestTone() {
+  var c = ensureAudio();
+  if (!c) return false;
+  var t0 = c.currentTime + 0.05;
+  tone(84, t0, 0.16, 0.09);
+  tone(91, t0 + 0.22, 0.24, 0.09);
+  audioCtl.markTested();
+  return true;
+}
+
+function renderAudioPanel() {
+  var body = document.getElementById('audioBody');
+  if (!body) return;
+  var c = audioCtl.state;
+  body.innerHTML = '';
+
+  var line = document.createElement('p');
+  line.className = 'audio-state-line';
+  line.textContent = '当前状态：' + audioLabel(c.state);
+  body.appendChild(line);
+
+  var note = document.createElement('p');
+  note.className = 'audio-note';
+  note.textContent = '声音由浏览器 Web Audio 实时合成，无需下载音频文件。页面不会自动发声，必须由你点一下才能启用。';
+  body.appendChild(note);
+
+  var facts = document.createElement('dl');
+  facts.className = 'audio-facts';
+  var rows = [
+    ['Web Audio 支持', audioSupported() ? '是' : '否'],
+    ['音频上下文', c.ctx ? c.ctx.state : '未创建'],
+    ['最近启用', fmtClock(c.lastEnabledAt)],
+    ['最近测试', fmtClock(c.lastTestAt)],
+    ['人耳确认', c.heard === 'yes' ? '已听到' : c.heard === 'no' ? '未听到' : '未确认'],
+    ['页面可见性', (typeof document !== 'undefined' ? document.visibilityState : '未知')],
+    ['手势触发', c.gesture ? '是' : '否'],
+    ['创建次数', String(c.created)],
+    ['最近错误', c.lastError || '无']
+  ];
+  rows.forEach(function (r) {
+    var dt = document.createElement('dt');
+    dt.textContent = r[0];
+    var dd = document.createElement('dd');
+    dd.textContent = r[1];
+    facts.appendChild(dt);
+    facts.appendChild(dd);
+  });
+  body.appendChild(facts);
+
+  if (c.lastTestAt) {
+    var ask = document.createElement('p');
+    ask.className = 'audio-ask';
+    ask.textContent = '刚才那两声测试音，你听到了吗？';
+    body.appendChild(ask);
+    var hb = document.createElement('div');
+    hb.className = 'audio-heard';
+    hb.appendChild(mkBtn('我听到了', 'btn' + (c.heard === 'yes' ? ' btn-ink' : ''), function () {
+      audioCtl.markHeard('yes');
+      renderAudioPanel();
+    }));
+    hb.appendChild(mkBtn('没听到', 'btn' + (c.heard === 'no' ? ' btn-ink' : ''), function () {
+      audioCtl.markHeard('no');
+      renderAudioPanel();
+    }));
+    body.appendChild(hb);
+  }
+
+  if (c.heard === 'no') {
+    var tips = document.createElement('ul');
+    tips.className = 'audio-tips';
+    [
+      '先确认手机媒体音量不是 0，也没有开静音或勿扰模式。',
+      '如果连着蓝牙耳机或外放音箱，看看声音是不是被路由到了别的设备。',
+      '确认这个页面在前台；从后台切回来的应用可能被系统暂停声音。',
+      '回到这里再点一次「启用声音」。',
+      '仍然没声，可以换一个浏览器再试，并把这个面板的诊断摘要一起反馈。'
+    ].forEach(function (t) {
+      var li = document.createElement('li');
+      li.textContent = t;
+      tips.appendChild(li);
+    });
+    body.appendChild(tips);
+  }
+
+  if (c.state === 'unsupported') {
+    var un = document.createElement('p');
+    un.className = 'audio-note';
+    un.textContent = '这个浏览器没有可用的 Web Audio 接口。游戏的进度、判定和文字反馈都不依赖声音，可以继续玩。';
+    body.appendChild(un);
+  }
+
+  var actions = document.getElementById('audioActions');
+  actions.innerHTML = '';
+  actions.appendChild(mkBtn('启用声音', 'btn btn-ink', function () {
+    ensureAudio();
+    renderAudioPanel();
+  }));
+  actions.appendChild(mkBtn('测试声音', 'btn', function () {
+    playTestTone();
+    renderAudioPanel();
+  }));
+  actions.appendChild(mkBtn('复制诊断', 'btn btn-quiet', function () {
+    var text = audioDiagText();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { flashChar('诊断摘要已复制。'); }, function () { showDiagFallback(text); });
+      } else {
+        showDiagFallback(text);
+      }
+    } catch (e) {
+      showDiagFallback(text);
+    }
+  }));
+}
+
+function showDiagFallback(text) {
+  var body = document.getElementById('audioBody');
+  if (!body) return;
+  var box = document.getElementById('audioDiagBox');
+  if (!box) {
+    box = document.createElement('textarea');
+    box.id = 'audioDiagBox';
+    box.className = 'audio-diag-box';
+    box.readOnly = true;
+    body.appendChild(box);
+  }
+  box.value = text;
+  box.focus();
+  box.select();
+}
+
+function openAudioPanel() {
+  renderAudioPanel();
+  var v = document.getElementById('audioVeil');
+  if (v) v.hidden = false;
 }
 
 function tone(midi, when, dur, gain) {
@@ -4628,6 +4935,12 @@ function bindGlobal() {
     else renderMap();
   });
   $('btnHelpLanding').addEventListener('click', openGeneralHelp);
+  var audioChip = $('audioChip');
+  if (audioChip) audioChip.addEventListener('click', openAudioPanel);
+  var audioClose = $('audioClose');
+  if (audioClose) audioClose.addEventListener('click', function () { $('audioVeil').hidden = true; });
+  document.addEventListener('visibilitychange', function () { audioCtl.refresh(); });
+  window.addEventListener('pageshow', function () { audioCtl.refresh(); });
   $('btnHint').addEventListener('click', function () {
     var room = ROOM_INDEX[state.roomId];
     if (room) useHint(room);
@@ -4676,7 +4989,9 @@ function bindGlobal() {
 
 function boot() {
   loadState();
+  audioCtl.init();
   bindGlobal();
+  renderAudioChip();
   var route = routeOnBoot(state);
   if (route === 'room') renderRoom();
   else if (route === 'map') renderMap();
@@ -4700,6 +5015,7 @@ if (typeof module !== 'undefined' && module.exports) {
     makeAvatar: makeAvatar, mulberry32: mulberry32, randomSeed: randomSeed,
     judgeRhythm: judgeRhythm, rhythmSubmitCheck: rhythmSubmitCheck, barSum: barSum,
     barTicks: barTicks, endingEligible: endingEligible, TICK_LABEL: TICK_LABEL,
+    createAudioController: createAudioController, audioDiagText: audioDiagText,
     compassDistance: compassDistance, compassNeighbors: compassNeighbors, compassKeyOf: compassKeyOf,
     AVATAR_DEFAULT: AVATAR_DEFAULT
   };
