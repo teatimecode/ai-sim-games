@@ -63,7 +63,7 @@ qa/       验收记录，含未验证项
 tests/    规则与内容自检（node tests/check.js）
 ```
 
-后续内容扩展的取舍与下一版范围写在 `design/CONTENT_ROADMAP.md`。
+后续内容扩展的取舍与下一版范围写在 `design/CONTENT_ROADMAP.md`，体验与审美升级的想法写在 `design/EXPERIENCE_UPGRADE.md`。
 
 ## 授权与素材
 
