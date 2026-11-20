@@ -608,3 +608,21 @@ body{
 .audio-tips{font-size:12px;line-height:1.85;color:#3b342c;padding-left:18px;margin:6px 0 10px}
 .audio-diag-box{width:100%;height:120px;font-family:var(--mono);font-size:11px;margin-top:8px;border:1px solid rgba(33,28,24,.3);border-radius:2px;padding:6px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ================= 试音浮层 ================= */
+.warmup .sheet{max-width:540px}
+.warmup-lead{margin:0 0 6px;font-size:13.5px;line-height:1.7;color:#3b342c}
+.warmup-ring{display:flex;justify-content:center;margin:4px 0}
+.warmup-ring svg{max-width:330px;width:100%;height:auto}
+.warmup-hint{text-align:center;font-size:12.5px;color:var(--ink-soft);min-height:20px;margin:2px 0 10px}
+
+/* ================= 触控目标 ≥44px ================= */
+.btn{min-height:44px}
+.pitch{min-height:44px}
+.rp-tile{min-height:44px;min-width:56px}
+.chord-opt{min-height:48px}
+.form-chip{min-height:44px}
+.room-row{min-height:44px}
+.swatch{min-height:44px;min-width:44px}
+.audio-chip{min-height:44px;padding-top:8px;padding-bottom:8px}
+.rb-track{height:44px}

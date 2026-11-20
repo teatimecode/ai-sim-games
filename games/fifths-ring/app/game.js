@@ -671,6 +671,107 @@ function openAudioPanel() {
   if (v) v.hidden = false;
 }
 
+
+/* ================= 4d. 试音与对照 ================= */
+
+function openWarmup() {
+  var host = document.getElementById('warmupRing');
+  if (!host) return;
+  host.innerHTML = '';
+  var names = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  var played = 0;
+  host.appendChild(buildRing({
+    order: 'fifths',
+    selected: [],
+    onNode: function (pc) {
+      ensureAudio();
+      var c = ensureAudio();
+      if (c) { tone(60 + pc, c.currentTime + 0.02, 1.1, 0.12); tone(48 + pc, c.currentTime + 0.02, 1.1, 0.07); }
+      played++;
+      var hint = document.getElementById('warmupHint');
+      if (hint) hint.textContent = played < 3 ? '再点几块，听听它们合不合。' : '这就是常音。城里的一切都搭在它上面。';
+    }
+  }));
+  var hint = document.getElementById('warmupHint');
+  if (hint) hint.textContent = '点一块石头，听听它。';
+  document.getElementById('warmupVeil').hidden = false;
+}
+
+function closeWarmup() {
+  document.getElementById('warmupVeil').hidden = true;
+  state.warmupDone = true;
+  saveState();
+}
+
+/* 每类房间的标准答案，用于失败后的对照试听 */
+function referencePlan(room) {
+  if (room.kind === 'counterpoint') {
+    var lv = LEVELS[room.cp];
+    return lv && lv.reference ? { type: 'exercise', level: lv, slots: lv.reference } : null;
+  }
+  if (room.kind === 'scale') return { type: 'scale', pcs: room.target.pcs, tonic: room.target.tonic };
+  if (room.kind === 'harmony') {
+    var chords = room.situations.map(function (s) {
+      return s.options.filter(function (o) { return harmonyIssues(s.prev, o, room.tonic).length === 0; })[0];
+    }).filter(Boolean);
+    return chords.length ? { type: 'chords', chords: chords } : null;
+  }
+  if (room.kind === 'set') {
+    if (room.mode === 'normal') {
+      var best = minSpanOf(room.members);
+      return { type: 'order', pcs: room.members, order: orderFrom(room.members, best.starts[0]).ordered };
+    }
+    var ghost = room.members.map(function (p) { return (p + room.transpose) % 12; });
+    return { type: 'set', pcs: commonTonesOf(room.members, ghost) };
+  }
+  if (room.kind === 'pop') return { type: 'chords', chords: room.chords.slice() };
+  if (room.kind === 'rhythm') return room.rhythm.answer ? { type: 'rhythm', room: room, bars: room.rhythm.answer } : null;
+  if (room.kind === 'compass') return { type: 'triad', pc: room.compass.to.pc, mode: room.compass.to.mode };
+  if (room.kind === 'form') return { type: 'piece', room: room };
+  return null;
+}
+
+function playReference(plan) {
+  if (!plan) return;
+  var c = ensureAudio();
+  if (!c) return;
+  var t0 = c.currentTime + 0.06;
+
+  if (plan.type === 'exercise') {
+    playExercise(plan.level, plan.slots);
+  } else if (plan.type === 'scale') {
+    var order = orderFrom(plan.pcs, plan.tonic).ordered;
+    order.forEach(function (pc, i) { tone(60 + pc, t0 + i * 0.34, 0.34, 0.15); });
+  } else if (plan.type === 'chords') {
+    plan.chords.forEach(function (ch, i) { playChord(ch.pcs, t0 + i * 0.9, 0.8, 0.09); });
+  } else if (plan.type === 'set') {
+    playChord(plan.pcs, t0, 1.2, 0.1);
+  } else if (plan.type === 'order') {
+    plan.order.forEach(function (pc, i) { tone(60 + pc, t0 + i * 0.3, 0.3, 0.14); });
+  } else if (plan.type === 'rhythm') {
+    playRhythm(plan.room, { bars: plan.bars });
+  } else if (plan.type === 'triad') {
+    playChord(tonicTriad({ pc: plan.pc, mode: plan.mode }), t0, 1.1, 0.1);
+  } else if (plan.type === 'piece') {
+    playForm(plan.room, 0, plan.room.form.bars.length);
+  }
+}
+
+function roomHasFailure(room) {
+  if (room.kind === 'counterpoint') {
+    var c = cpState(room);
+    return c.attempts > 0 && judge(LEVELS[room.cp], c.slots).violations.length > 0;
+  }
+  if (room.kind === 'scale') { var s = scaleState(room); return !!(s.checked && s.error); }
+  if (room.kind === 'harmony') { var h = harmonyState(room); return !!h.bad; }
+  if (room.kind === 'set') { var t = setState(room); return !!(t.checked && t.error); }
+  if (room.kind === 'pop') { var p = popState(room); return !!p.bad; }
+  if (room.kind === 'rhythm') { var r = rhythmState(room); return !!(r.checked && r.lastError); }
+  if (room.kind === 'form') { var f = formState(room); return !!(f.checked && f.error); }
+  if (room.kind === 'compass') { var cs = compassState(room); return !!(cs.checked && cs.error); }
+  return false;
+}
+
 function tone(midi, when, dur, gain) {
   var c = ensureAudio();
   if (!c) return;
@@ -1041,7 +1142,8 @@ var ROOMS = [
     rhythm: {
       meter: '4/4', bars: 2, ticksPerBar: 16, groups: [4, 4, 4, 4],
       requireOnsets: [0, 4, 8, 12], forbidCrossing: false,
-      palette: [8, 4, 2, 1], allowRests: true
+      palette: [8, 4, 2, 1], allowRests: true,
+      answer: [[{ len: 4 }, { len: 4 }, { len: 4 }, { len: 4 }], [{ len: 4 }, { len: 4 }, { len: 4 }, { len: 4 }]]
     }
   },
   {
@@ -1097,7 +1199,8 @@ var ROOMS = [
     rhythm: {
       meter: '6/8', bars: 2, ticksPerBar: 12, groups: [6, 6],
       requireOnsets: [0, 6], forbidCrossing: true,
-      palette: [6, 4, 2, 1], allowRests: true
+      palette: [6, 4, 2, 1], allowRests: true,
+      answer: [[{ len: 6 }, { len: 6 }], [{ len: 6 }, { len: 6 }]]
     }
   },
   {
@@ -1643,7 +1746,8 @@ var state = {
   records: {},
   pendingRecord: null,
   compass: {},
-  rhythm: {}
+  rhythm: {},
+  warmupDone: false
 };
 
 function totalSlots(level) {
@@ -1665,7 +1769,7 @@ function saveState() {
       seals: state.seals, signed: state.signed, started: state.started,
       avatar: state.avatar, avatarSeed: state.avatarSeed, avatarConfirmed: state.avatarConfirmed,
       hintTier: state.hintTier, records: state.records,
-      compass: state.compass, rhythm: state.rhythm
+      compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -1681,6 +1785,7 @@ function loadState() {
     if (d.signed) state.signed = d.signed;
     if (d.started) state.started = true;
     if (d.avatar) state.avatar = d.avatar;
+    if (d.warmupDone) state.warmupDone = true;
     if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
@@ -3047,6 +3152,7 @@ function resetProgress() {
   state.avatar = null;
   state.avatarSeed = null;
   state.avatarConfirmed = false;
+  state.warmupDone = false;
   state.roomId = null;
   state.district = 'quarry';
   state.started = false;
@@ -3104,6 +3210,7 @@ function enterRoom(id) {
   state.view = 'room';
   state.district = room.district;
   renderRoom();
+  if (!state.warmupDone) openWarmup();
   saveState();
 }
 
@@ -3418,6 +3525,7 @@ function buildActionBar(host, p) {
   }
   var listen = group('先听材料');
   var task = group('作答');
+  var compare = group('对照');
   var submit = group('提交验收');
 
   var hint = document.createElement('span');
@@ -3429,9 +3537,11 @@ function buildActionBar(host, p) {
     listen: function (el) { if (el) listen.body.appendChild(el); },
     task: function (el) { if (el) task.body.appendChild(el); },
     submit: function (el) { if (el) submit.body.insertBefore(el, hint); },
+    compare: function (el) { if (el) compare.body.appendChild(el); },
     finish: function () {
       if (!listen.body.children.length) listen.wrap.hidden = true;
       if (!task.body.children.length) task.wrap.hidden = true;
+      if (!compare.body.children.length) compare.wrap.hidden = true;
       if (!submit.body.children.length) submit.wrap.hidden = true;
     }
   };
@@ -3527,6 +3637,11 @@ function renderRoom() {
   else if (room.kind === 'compass') renderCompassRoom(room, work, bar);
   else if (room.kind === 'rhythm') renderRhythmRoom(room, work, bar);
   else renderLockedRoom(room, work, bar);
+
+  if (roomHasFailure(room)) {
+    var refPlan = referencePlan(room);
+    if (refPlan) bar.compare(mkBtn('听修好的版本', 'btn', function () { playReference(refPlan); }));
+  }
 
   bar.finish();
   saveState();
@@ -4937,6 +5052,10 @@ function bindGlobal() {
   $('btnHelpLanding').addEventListener('click', openGeneralHelp);
   var audioChip = $('audioChip');
   if (audioChip) audioChip.addEventListener('click', openAudioPanel);
+  var warmDone = $('warmupDone');
+  if (warmDone) warmDone.addEventListener('click', closeWarmup);
+  var warmSkip = $('warmupSkip');
+  if (warmSkip) warmSkip.addEventListener('click', closeWarmup);
   var audioClose = $('audioClose');
   if (audioClose) audioClose.addEventListener('click', function () { $('audioVeil').hidden = true; });
   document.addEventListener('visibilitychange', function () { audioCtl.refresh(); });
@@ -5016,6 +5135,7 @@ if (typeof module !== 'undefined' && module.exports) {
     judgeRhythm: judgeRhythm, rhythmSubmitCheck: rhythmSubmitCheck, barSum: barSum,
     barTicks: barTicks, endingEligible: endingEligible, TICK_LABEL: TICK_LABEL,
     createAudioController: createAudioController, audioDiagText: audioDiagText,
+    referencePlan: referencePlan, playReference: playReference, roomHasFailure: roomHasFailure,
     compassDistance: compassDistance, compassNeighbors: compassNeighbors, compassKeyOf: compassKeyOf,
     AVATAR_DEFAULT: AVATAR_DEFAULT
   };

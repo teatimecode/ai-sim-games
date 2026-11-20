@@ -492,6 +492,27 @@ ok('audio: no audio fetch', !/fetch\([^)]*\.(mp3|wav|ogg)/i.test(fullSrc));
 ok('audio: single audio gate', src.indexOf('function ensureAudio()') !== -1 && src.indexOf('audioCtl.unlock()') !== -1);
 ok('audio: no second AudioContext creation', (src.match(/new Ctor\(\)/g) || []).length === 1);
 
+/* ---------- 18. 首胜、对照听与触控 ---------- */
+const playableAll = rooms.filter((r) => r.kind !== 'locked');
+ok('reference: every playable room has a plan',
+  playableAll.every((r) => !!m.referencePlan(r)),
+  playableAll.filter((r) => !m.referencePlan(r)).map((r) => r.id).join(','));
+
+const rhythmRooms2 = rooms.filter((r) => r.kind === 'rhythm');
+rhythmRooms2.forEach((r) => {
+  ok('reference: rhythm answer fills each bar ' + r.id,
+    r.rhythm.answer.length === r.rhythm.bars && r.rhythm.answer.every((b) => b.reduce((a, p) => a + p.len, 0) === r.rhythm.ticksPerBar));
+  ok('reference: rhythm answer is legal ' + r.id, m.judgeRhythm(r, r.rhythm.answer).ok === true);
+});
+
+ok('warmup overlay exists', html.indexOf('id="warmupVeil"') !== -1);
+ok('warmup can be skipped', html.indexOf('id="warmupSkip"') !== -1);
+ok('warmup shows once then persists', src.indexOf('warmupDone') !== -1 && src.indexOf('if (!state.warmupDone) openWarmup();') !== -1);
+ok('compare button only after a failure', src.indexOf('if (roomHasFailure(room))') !== -1 && src.indexOf("bar.compare(mkBtn('听修好的版本'") !== -1);
+ok('touch targets are at least 44px',
+  css.indexOf('.btn{min-height:44px}') !== -1 && css.indexOf('.pitch{min-height:44px}') !== -1 &&
+  css.indexOf('.rp-tile{min-height:44px') !== -1 && css.indexOf('.swatch{min-height:44px') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
