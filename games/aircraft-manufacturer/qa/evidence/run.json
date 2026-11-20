@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "e285eb8ad4c43de6",
+  "buildHash": "b96ded233c3bbd6e",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
-  "startedAt": "2026-11-19T04:20:00Z",
+  "startedAt": "2026-11-20T10:35:00Z",
   "inputTrace": [
     {
       "step": 1,
@@ -96,7 +96,8 @@
         "prologueScreens": 8,
         "prologueArt": 4,
         "turn": 1,
-        "cash": 2.0
+        "cash": 2.0,
+        "photoFallback": true
       }
     },
     "render": {
@@ -121,7 +122,8 @@
         "codexItems": 15,
         "criticalPathChips": 4,
         "guideOn": true,
-        "tutorialBar": true
+        "tutorialBar": true,
+        "photoLayer": "assets/prologue-*.jpg 优先，缺失回退线稿"
       }
     },
     "input": {
@@ -171,7 +173,7 @@
           7
         ],
         "eventsSeen": "按种子抽 4–5 张，含竞品降价/局方加试/客户改窗口等",
-        "cash": 5.8,
+        "cash": 7.37,
         "seed": 14508,
         "storyNodes": 3,
         "seat": "main",
@@ -193,7 +195,7 @@
         "ending": "win",
         "title": "通关 · 续任",
         "delivered": 31,
-        "cash": 5.8,
+        "cash": 7.37,
         "visual": "qa/evidence/04-ending.png"
       }
     },

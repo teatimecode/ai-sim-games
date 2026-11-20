@@ -90,135 +90,163 @@
   const ART_TEAL = 'fill="none" stroke="#1E6F78" stroke-width="1.2"';
   const ART_AMBER = 'fill="none" stroke="#B0701C" stroke-width="1.2"';
 
+  // 照片放在 assets/ 下，存在则优先使用；缺失时自动回退到线稿
+  const PHOTO_SRC = {
+    yard: 'assets/prologue-yard.jpg',
+    shop: 'assets/prologue-shop.jpg',
+    desk: 'assets/prologue-notebook.jpg',
+    board: 'assets/prologue-board.jpg',
+    runway: 'assets/prologue-runway.jpg'
+  };
+  function artBlock(key) {
+    const svg = PROLOGUE_ART[key] || '';
+    const src = PHOTO_SRC[key];
+    if (!src) return '<div class="proart">' + svg + '</div>';
+    return '<div class="proart">' +
+      '<img class="artimg" src="' + src + '" alt="" onerror="this.parentNode.classList.add(\'noimg\');this.remove()">' +
+      '<div class="artfallback">' + svg + '</div>' +
+      '</div>';
+  }
+
   function artWrap(inner, vb) {
     return '<svg viewBox="' + (vb || '0 0 1000 360') + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block">' + inner + '</svg>';
   }
 
   const PROLOGUE_ART = {
     yard: artWrap(
-      // 地平线与江面
-      '<path d="M0 214 L1000 214" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '>' +
-      '<path d="M0 238 L1000 238"/><path d="M0 252 L1000 252"/><path d="M0 266 L1000 266"/>' +
-      '<path d="M120 280 L300 280"/><path d="M420 292 L640 292"/><path d="M760 286 L920 286"/>' +
-      '</g>' +
-      // 厂房
-      '<path d="M90 214 L90 140 L300 140 L300 214" ' + ART_INK + '/>' +
-      '<path d="M90 140 L195 108 L300 140" ' + ART_INK + '/>' +
-      '<path d="M120 214 L120 168 L168 168 L168 214" ' + ART_INK + '/>' +
-      '<path d="M196 214 L196 168 L244 168 L244 214" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M126 180 L162 180"/><path d="M126 192 L162 192"/><path d="M202 180 L238 180"/><path d="M202 192 L238 192"/></g>' +
-      // 第二座厂房
-      '<path d="M330 214 L330 156 L520 156 L520 214" ' + ART_INK + '/>' +
-      '<path d="M330 156 L425 128 L520 156" ' + ART_INK + '/>' +
-      '<path d="M370 214 L370 176 L430 176 L430 214" ' + ART_INK + '/>' +
-      '<path d="M470 214 L470 186 L500 186 L500 214" ' + ART_INK + '/>' +
-      // 烟囱与塔吊
-      '<path d="M560 214 L560 116 L584 116 L584 214" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M560 132 L584 132"/><path d="M560 148 L584 148"/><path d="M560 164 L584 164"/></g>' +
-      '<path d="M700 214 L700 70 L706 70 L706 214" ' + ART_INK + '/>' +
-      '<path d="M600 86 L706 62" ' + ART_INK + '/>' +
-      '<path d="M706 62 L760 86" ' + ART_INK + '/>' +
-      '<path d="M760 86 L760 128" ' + ART_AMBER + '/>' +
-      '<path d="M706 62 L706 96" ' + ART_TEAL + '/>' +
-      // 远处天际线
-      '<g ' + ART_HATCH + '>' +
-      '<path d="M790 214 L790 190 L830 190 L830 214"/>' +
-      '<path d="M850 214 L850 176 L884 176 L884 214"/>' +
-      '<path d="M900 214 L900 196 L950 196 L950 214"/>' +
-      '</g>' +
-      // 晨雾
-      '<g ' + ART_HATCH + '><path d="M40 120 L240 120"/><path d="M540 150 L700 150"/><path d="M300 96 L520 96"/></g>' +
-      '<text x="40" y="330" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">EARLY MORNING · RIVERSIDE WORKS</text>', '0 30 1000 320'),
+      '<defs>' +
+      '<linearGradient id="gSkyY" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F3EEE2"/><stop offset="1" stop-color="#E3DBC9"/></linearGradient>' +
+      '<linearGradient id="gGndY" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9D2C0"/><stop offset="1" stop-color="#C9C1AC"/></linearGradient>' +
+      '<radialGradient id="gDoorY" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#F0D9A8" stop-opacity=".85"/><stop offset="1" stop-color="#F0D9A8" stop-opacity="0"/></radialGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gSkyY)"/>' +
+      '<rect x="0" y="200" width="1000" height="30" fill="#F5F1E6" opacity=".65"/>' +
+      '<rect x="0" y="214" width="1000" height="146" fill="url(#gGndY)"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".35"><path d="M0 244 L1000 244"/><path d="M0 262 L1000 262"/><path d="M0 286 L1000 286"/><path d="M0 316 L1000 316"/></g>' +
+      '<ellipse cx="196" cy="216" rx="150" ry="9" fill="#9C9482" opacity=".33"/>' +
+      '<ellipse cx="425" cy="217" rx="120" ry="8" fill="#9C9482" opacity=".3"/>' +
+      '<rect x="92" y="142" width="208" height="72" fill="#E7E0CE" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M92 142 L196 110 L300 142" fill="#DED6C3" stroke="#16222B" stroke-width="1.2"/>' +
+      '<rect x="120" y="168" width="48" height="46" fill="#F2E6C8" stroke="#16222B" stroke-width="1"/>' +
+      '<ellipse cx="144" cy="191" rx="30" ry="26" fill="url(#gDoorY)"/>' +
+      '<rect x="196" y="168" width="48" height="46" fill="#CFC7B4" stroke="#16222B" stroke-width="1"/>' +
+      '<g stroke="#8D887C" stroke-width=".7" opacity=".5"><path d="M200 178 L240 178"/><path d="M200 190 L240 190"/><path d="M200 202 L240 202"/></g>' +
+      '<rect x="330" y="158" width="190" height="56" fill="#E4DCCA" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M330 158 L425 130 L520 158" fill="#D8D0BC" stroke="#16222B" stroke-width="1.2"/>' +
+      '<rect x="370" y="178" width="58" height="36" fill="#CDC5B1" stroke="#16222B" stroke-width="1"/>' +
+      '<rect x="470" y="188" width="30" height="26" fill="#F2E6C8" stroke="#16222B" stroke-width="1"/>' +
+      '<rect x="560" y="116" width="24" height="98" fill="#DDD5C2" stroke="#16222B" stroke-width="1.2"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".55"><path d="M560 132 L584 132"/><path d="M560 150 L584 150"/><path d="M560 168 L584 168"/></g>' +
+      '<path d="M700 214 L700 70" stroke="#16222B" stroke-width="2.2"/>' +
+      '<path d="M596 88 L706 62 L762 88" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<path d="M762 88 L762 130" stroke="#B0701C" stroke-width="1.4"/>' +
+      '<path d="M706 62 L706 100" stroke="#1E6F78" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width=".9" opacity=".45"><path d="M790 214 L790 190 L832 190 L832 214"/><path d="M850 214 L850 176 L886 176 L886 214"/><path d="M902 214 L902 196 L952 196 L952 214"/></g>' +
+      '<g stroke="#FFFFFF" stroke-width="2" opacity=".5"><path d="M0 226 L1000 226"/><path d="M120 250 L420 250"/><path d="M600 274 L900 274"/></g>' +
+      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">EARLY MORNING · RIVERSIDE WORKS</text>', '0 26 1000 322'),
+
     shop: artWrap(
-      // 屋顶桁架
-      '<g ' + ART_HATCH + '>' +
-      '<path d="M0 60 L1000 60"/><path d="M0 96 L1000 96"/>' +
-      '<path d="M60 60 L100 96 L140 60 L180 96 L220 60 L260 96 L300 60 L340 96 L380 60 L420 96"/>' +
-      '<path d="M460 60 L500 96 L540 60 L580 96 L620 60 L660 96 L700 60 L740 96 L780 60 L820 96 L860 60 L900 96 L940 60"/>' +
+      '<defs>' +
+      '<linearGradient id="gHallS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCD5C4"/><stop offset="1" stop-color="#CFC8B7"/></linearGradient>' +
+      '<linearGradient id="gBarrelS" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9E2D0"/><stop offset=".45" stop-color="#F6F1E4"/><stop offset="1" stop-color="#CFC7B3"/></linearGradient>' +
+      '<linearGradient id="gLampS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2DFB2" stop-opacity=".55"/><stop offset="1" stop-color="#F2DFB2" stop-opacity="0"/></linearGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gHallS)"/>' +
+      '<path d="M470 60 L470 300 L560 300 L560 60 Z" fill="url(#gLampS)"/>' +
+      '<path d="M150 60 L150 300 L230 300 L230 60 Z" fill="url(#gLampS)"/>' +
+      '<g stroke="#8D887C" stroke-width=".9" opacity=".55"><path d="M0 58 L1000 58"/><path d="M0 96 L1000 96"/><path d="M60 58 L100 96 L140 58 L180 96 L220 58 L260 96 L300 58 L340 96 L380 58 L420 96"/><path d="M460 58 L500 96 L540 58 L580 96 L620 58 L660 96 L700 58 L740 96 L780 58 L820 96 L860 58 L900 96 L940 58"/></g>' +
+      '<path d="M120 62 L120 132 L860 132 L860 62" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<rect x="466" y="132" width="54" height="26" fill="#D8D0BD" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M493 158 L493 198" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M462 198 L524 198" stroke="#16222B" stroke-width="2"/>' +
+      '<ellipse cx="430" cy="302" rx="130" ry="12" fill="#9C9482" opacity=".3"/>' +
+      '<path d="M180 300 L180 208 L360 208 L360 300" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<path d="M620 300 L620 208 L800 208 L800 300" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<path d="M360 232 L620 232" stroke="#8D887C" stroke-width="1" opacity=".6"/>' +
+      '<path d="M360 268 L620 268" stroke="#8D887C" stroke-width="1" opacity=".6"/>' +
+      '<ellipse cx="470" cy="246" rx="46" ry="58" fill="url(#gBarrelS)" stroke="#16222B" stroke-width="1.6"/>' +
+      '<path d="M516 202 L604 210 L604 282 L516 290" fill="#EDE6D4" stroke="#16222B" stroke-width="1.4"/>' +
+      '<ellipse cx="604" cy="246" rx="24" ry="36" fill="#DCD4C1" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width=".7" opacity=".75"><path d="M470 190 L470 302"/><path d="M496 196 L496 296"/><path d="M530 200 L530 292"/><path d="M560 204 L560 288"/><path d="M590 208 L590 284"/></g>' +
+      '<g stroke="#8D887C" stroke-width=".55" opacity=".55"><path d="M452 200 L452 292"/><path d="M440 204 L440 288"/><path d="M428 208 L428 284"/></g>' +
+      '<ellipse cx="300" cy="292" rx="16" ry="4" fill="#9C9482" opacity=".45"/>' +
+      '<ellipse cx="676" cy="294" rx="14" ry="4" fill="#9C9482" opacity=".45"/>' +
+      '<g fill="#16222B" fill-opacity=".62"><circle cx="300" cy="262" r="7"/><path d="M292 270 h16 v24 h-16 z"/><circle cx="676" cy="266" r="7"/><path d="M668 274 h16 v22 h-16 z"/><circle cx="714" cy="272" r="6"/><path d="M707 279 h14 v19 h-14 z"/></g>' +
+      '<path d="M0 300 L1000 300" stroke="#16222B" stroke-width="1.6"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".4"><path d="M0 318 L1000 318"/><path d="M60 334 L240 334"/><path d="M700 334 L880 334"/></g>' +
+      '<text x="40" y="350" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BAY 01 · FUSELAGE SECTION ON JIG</text>', '0 30 1000 330'),
+
+    desk: artWrap(
+      '<defs>' +
+      '<linearGradient id="gDeskD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCD3BF"/><stop offset="1" stop-color="#C8BFA9"/></linearGradient>' +
+      '<radialGradient id="gLampD" cx="0.18" cy="0.25" r="0.85"><stop offset="0" stop-color="#FBF0D4" stop-opacity=".9"/><stop offset="1" stop-color="#FBF0D4" stop-opacity="0"/></radialGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gDeskD)"/>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gLampD)"/>' +
+      '<path d="M0 236 L1000 236" stroke="#A89E88" stroke-width="1.4"/>' +
+      '<path d="M60 236 L60 340 L940 340 L940 236" fill="#BFB5A0" stroke="#8D887C" stroke-width="1"/>' +
+      '<rect x="180" y="150" width="420" height="196" fill="#F7F2E4" stroke="#16222B" stroke-width="1.6"/>' +
+      '<path d="M180 150 L560 150 L610 176 L230 176 Z" fill="#EFE7D4" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M560 150 L610 176 L610 300 L560 346 Z" fill="#E7DECB" stroke="#16222B" stroke-width="1"/>' +
+      '<g stroke="#B0701C" stroke-width=".8" opacity=".55">' +
+      '<path d="M210 196 L520 196"/><path d="M210 210 L470 210"/><path d="M210 224 L540 224"/><path d="M210 238 L430 238"/><path d="M210 252 L500 252"/>' +
+      '<path d="M210 274 L380 274"/><path d="M210 288 L520 288"/><path d="M210 302 L450 302"/>' +
       '</g>' +
-      // 行车
-      '<path d="M120 60 L120 132 L860 132 L860 60" ' + ART_INK + '/>' +
-      '<rect x="470" y="132" width="46" height="26" ' + ART_INK + '/>' +
-      '<path d="M493 158 L493 196" ' + ART_INK + '/>' +
-      '<path d="M470 196 L516 196" ' + ART_INK + '/>' +
-      // 型架
-      '<path d="M180 300 L180 210 L360 210 L360 300" ' + ART_INK + '/>' +
-      '<path d="M620 300 L620 210 L800 210 L800 300" ' + ART_INK + '/>' +
-      // 机身筒段
-      '<ellipse cx="420" cy="244" rx="46" ry="58" ' + ART_INK + '/>' +
-      '<path d="M466 200 L600 208 L600 280 L466 288" ' + ART_TEAL + '/>' +
-      '<ellipse cx="600" cy="244" rx="26" ry="36" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '>' +
-      '<path d="M400 196 L400 292"/><path d="M430 190 L430 298"/><path d="M460 188 L460 300"/>' +
-      '<path d="M500 200 L500 288"/><path d="M540 204 L540 284"/>' +
-      '</g>' +
-      // 工人剪影
-      '<g fill="#16222B" fill-opacity=".55" stroke="none">' +
-      '<circle cx="300" cy="264" r="7"/><path d="M293 272 h14 v26 h-14 z"/>' +
-      '<circle cx="676" cy="268" r="7"/><path d="M669 276 h14 v24 h-14 z"/>' +
-      '<circle cx="712" cy="272" r="6"/><path d="M706 279 h12 v21 h-12 z"/>' +
-      '</g>' +
-      // 地面
-      '<path d="M0 300 L1000 300" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M0 316 L1000 316"/><path d="M60 330 L240 330"/><path d="M700 330 L880 330"/></g>' +
-      '<text x="40" y="348" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BAY 01 · FUSELAGE SECTION ON JIG</text>', '0 30 1000 330'),
+      '<g stroke="#16222B" stroke-width=".9" opacity=".45"><path d="M232 262 L420 262 L420 316 L232 316 Z"/><path d="M310 262 L310 316"/></g>' +
+      '<path d="M660 240 L900 240 L900 254 L660 254 Z" fill="#E2D8C2" stroke="#16222B" stroke-width="1.2"/>' +
+      '<g stroke="#16222B" stroke-width=".7" opacity=".5"><path d="M680 244 L680 250"/><path d="M700 244 L700 250"/><path d="M720 244 L720 250"/><path d="M740 244 L740 250"/><path d="M760 244 L760 250"/><path d="M780 244 L780 250"/></g>' +
+      '<path d="M652 300 L870 300 L878 312 L660 312 Z" fill="#D8CEB8" stroke="#16222B" stroke-width="1"/>' +
+      '<ellipse cx="404" cy="352" rx="220" ry="7" fill="#9C9482" opacity=".28"/>' +
+      '<text x="40" y="60" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">DESK DRAWER · OLD NOTEBOOK</text>', '0 30 1000 330'),
+
     board: artWrap(
-      // 房间轮廓
-      '<path d="M60 60 L940 60 L940 300 L60 300" ' + ART_INK + '/>' +
-      // 白板
-      '<rect x="120" y="86" width="420" height="150" ' + ART_INK + '/>' +
-      '<path d="M150 200 L500 200" ' + ART_INK + '/>' +
-      '<g ' + ART_AMBER + '>' +
-      '<path d="M170 200 L170 184"/><path d="M240 200 L240 176"/><path d="M310 200 L310 180"/>' +
-      '<path d="M380 200 L380 172"/><path d="M450 200 L450 178"/>' +
-      '</g>' +
-      '<g ' + ART_HATCH + '>' +
-      '<path d="M150 124 L330 124"/><path d="M150 140 L280 140"/><path d="M150 156 L360 156"/>' +
-      '<path d="M470 124 L500 124"/><path d="M470 140 L500 140"/>' +
-      '</g>' +
-      // 长桌（透视）
-      '<path d="M120 300 L200 240 L780 240 L860 300 Z" ' + ART_INK + '/>' +
-      '<path d="M200 240 L120 300" ' + ART_INK + '/>' +
-      '<path d="M780 240 L860 300" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M260 252 L740 252"/><path d="M220 276 L780 276"/></g>' +
-      // 椅子
-      '<g ' + ART_INK + '>' +
-      '<path d="M300 240 L300 210 L340 210 L340 240"/>' +
-      '<path d="M440 240 L440 206 L480 206 L480 240"/>' +
-      '<path d="M580 240 L580 210 L620 210 L620 240"/>' +
-      '</g>' +
-      // 窗
-      '<rect x="640" y="86" width="240" height="110" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M760 86 L760 196"/><path d="M640 141 L880 141"/></g>' +
-      '<path d="M660 196 L660 170 L700 170 L700 196" ' + ART_TEAL + '/>' +
-      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BOARD ROOM · 18 QUARTERS</text>', '0 40 1000 310'),
+      '<defs>' +
+      '<linearGradient id="gRoomB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EFE9DB"/><stop offset="1" stop-color="#DCD5C4"/></linearGradient>' +
+      '<linearGradient id="gWinB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F8F5EC"/><stop offset="1" stop-color="#E4DED0"/></linearGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gRoomB)"/>' +
+      '<rect x="636" y="80" width="248" height="120" fill="url(#gWinB)" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width="1" opacity=".7"><path d="M760 80 L760 200"/><path d="M636 140 L884 140"/></g>' +
+      '<path d="M636 200 L884 200 L920 300 L600 300 Z" fill="#F6F1E4" opacity=".45"/>' +
+      '<rect x="110" y="84" width="430" height="152" fill="#F8F5EC" stroke="#16222B" stroke-width="1.6"/>' +
+      '<path d="M140 198 L510 198" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#B0701C" stroke-width="1.6"><path d="M168 198 L168 180"/><path d="M240 198 L240 172"/><path d="M312 198 L312 176"/><path d="M384 198 L384 168"/><path d="M456 198 L456 174"/></g>' +
+      '<g stroke="#8D887C" stroke-width=".9" opacity=".75"><path d="M140 116 L330 116"/><path d="M140 132 L280 132"/><path d="M140 148 L364 148"/><path d="M140 164 L240 164"/></g>' +
+      '<g stroke="#1E6F78" stroke-width="1"><path d="M470 116 L500 116"/><path d="M470 132 L500 132"/><path d="M470 148 L500 148"/></g>' +
+      '<ellipse cx="490" cy="302" rx="290" ry="10" fill="#9C9482" opacity=".25"/>' +
+      '<path d="M120 300 L206 238 L782 238 L868 300 Z" fill="#D6CCB6" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".5"><path d="M258 250 L740 250"/><path d="M214 276 L782 276"/></g>' +
+      '<g stroke="#16222B" stroke-width="1.2" fill="none"><path d="M300 238 L300 206 L342 206 L342 238"/><path d="M440 238 L440 202 L482 202 L482 238"/><path d="M580 238 L580 206 L622 206 L622 238"/></g>' +
+      '<g fill="#16222B" fill-opacity=".5"><rect x="252" y="248" width="26" height="3"/><rect x="352" y="256" width="34" height="3"/><rect x="470" y="252" width="20" height="3"/></g>' +
+      '<path d="M64 60 L64 300" stroke="#8D887C" stroke-width="1" opacity=".5"/>' +
+      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BOARD ROOM · 18 QUARTERS</text>', '0 30 1000 330'),
+
     runway: artWrap(
-      // 天空与地平线
-      '<path d="M0 196 L1000 196" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M80 150 L300 150"/><path d="M420 128 L620 128"/><path d="M700 160 L900 160"/></g>' +
-      // 跑道透视
-      '<path d="M300 196 L120 330" ' + ART_INK + '/>' +
-      '<path d="M700 196 L880 330" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '>' +
-      '<path d="M340 210 L660 210"/><path d="M330 236 L670 236"/><path d="M316 264 L684 264"/><path d="M300 296 L700 296"/>' +
+      '<defs>' +
+      '<linearGradient id="gDawnR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DAD5C8"/><stop offset=".62" stop-color="#E8DCC4"/><stop offset="1" stop-color="#F0E2C6"/></linearGradient>' +
+      '<linearGradient id="gRwyR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9C2B0"/><stop offset="1" stop-color="#B3AB98"/></linearGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gDawnR)"/>' +
+      '<rect x="0" y="150" width="1000" height="50" fill="#FBF5E6" opacity=".55"/>' +
+      '<rect x="0" y="196" width="1000" height="164" fill="url(#gRwyR)"/>' +
+      '<g stroke="#F7F2E6" stroke-width=".8" opacity=".35"><path d="M0 240 L1000 240"/><path d="M0 262 L1000 262"/><path d="M0 292 L1000 292"/><path d="M0 328 L1000 328"/></g>' +
+      '<path d="M300 196 L110 360" stroke="#F6F1E2" stroke-width="3"/>' +
+      '<path d="M700 196 L890 360" stroke="#F6F1E2" stroke-width="3"/>' +
+      '<g stroke="#F6F1E2" stroke-width="2.6"><path d="M500 302 L500 322"/><path d="M500 256 L500 278"/><path d="M500 216 L500 234"/></g>' +
+      '<g fill="#B0701C"><circle cx="352" cy="244" r="2.4"/><circle cx="330" cy="286" r="2.8"/><circle cx="646" cy="244" r="2.4"/><circle cx="672" cy="290" r="2.8"/></g>' +
+      '<path d="M792 196 L792 118 L832 118 L832 196" fill="#D9D2C0" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M778 118 L846 118 L846 102 L778 102 Z" fill="#E4DCCA" stroke="#16222B" stroke-width="1.2"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".6"><path d="M784 110 L840 110"/></g>' +
+      '<ellipse cx="500" cy="214" rx="90" ry="6" fill="#9C9482" opacity=".22"/>' +
+      '<g transform="translate(486,178) rotate(-8)">' +
+      '<path d="M-52 0 L44 -5 L64 0 L44 5 L-52 0 Z" fill="#2C3742" fill-opacity=".85"/>' +
+      '<path d="M-6 -2 L-26 -24 L-14 -24 L8 -2 Z" fill="#2C3742" fill-opacity=".7"/>' +
+      '<path d="M-6 2 L-26 24 L-14 24 L8 2 Z" fill="#2C3742" fill-opacity=".7"/>' +
+      '<path d="M46 -2 L58 -16 L62 -16 L56 -2 Z" fill="#2C3742" fill-opacity=".7"/>' +
+      '<path d="M-30 7 L20 7" stroke="#C9A15C" stroke-width="1" opacity=".6"/>' +
       '</g>' +
-      '<g ' + ART_TEAL + '>' +
-      '<path d="M500 300 L500 322"/><path d="M500 254 L500 278"/><path d="M500 214 L500 234"/>' +
-      '</g>' +
-      // 塔台
-      '<path d="M790 196 L790 120 L830 120 L830 196" ' + ART_INK + '/>' +
-      '<path d="M778 120 L842 120 L842 104 L778 104 Z" ' + ART_INK + '/>' +
-      '<g ' + ART_HATCH + '><path d="M784 110 L836 110"/></g>' +
-      // 飞机（远处，起飞姿态）
-      '<g transform="translate(470,176) rotate(-7)">' +
-      '<path d="M-46 0 L40 -4 L58 0 L40 4 L-46 0 Z" fill="#16222B" fill-opacity=".75" stroke="none"/>' +
-      '<path d="M-6 -2 L-24 -22 L-14 -22 L8 -2 Z" fill="#16222B" fill-opacity=".6" stroke="none"/>' +
-      '<path d="M-6 2 L-24 22 L-14 22 L8 2 Z" fill="#16222B" fill-opacity=".6" stroke="none"/>' +
-      '<path d="M42 -2 L52 -14 L56 -14 L50 -2 Z" fill="#16222B" fill-opacity=".6" stroke="none"/>' +
-      '</g>' +
-      '<g ' + ART_AMBER + '><path d="M410 190 L470 186"/><path d="M566 184 L620 190"/></g>' +
-      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">FIRST FLIGHT · 42 MINUTES</text>', '0 66 1000 286')
+      '<g stroke="#B0701C" stroke-width="1.2" opacity=".55"><path d="M404 192 L456 188"/><path d="M576 186 L624 192"/></g>' +
+      '<text x="40" y="340" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">FIRST FLIGHT · 42 MINUTES</text>', '0 40 1000 320')
   };
 
   let prologuePick = { seat: 'main', route: 'clean' };
@@ -233,7 +261,7 @@
       b: `<p>干线窄体市场被两家吃掉八成：巨杉航空靠规模和全球服务网，欧陆联合靠机型族谱和产能。第三极是东方商用，靠国家意志硬撑一条产线在爬坡。</p>
           <p>剩下的缝隙有两个：一是 100 座上下、被两家都不太在意的支线喷气；二是 130 座级，正面撞上去，但量大。</p>
           <p><b>你要选一个位置站进去。</b></p>` },
-    { t: '前任总师老周', art: 'shop',
+    { t: '前任总师老周', art: 'desk',
       b: `<p>老周在这个位子上坐了六年，去年被换掉。原因是 P-7 的一次改型延期了七个月，客户退了四架。</p>
           <p>他走的那天把一本笔记本留在抽屉里。第一页写着：<b>不要在设计没冻结的时候开始做工装。</b> 你后来才知道这句话让公司赔过一笔钱。</p>` },
     { t: '董事会给了你十八个季度', art: 'board',
@@ -259,7 +287,7 @@
     const body = p.choice
       ? `<p>${p.b || ''}</p>` + p.opts.map((o) => `<div class="choice" data-pick="${p.choice}" data-val="${o.k}"><h4>${o.h}</h4><p>${o.d}</p></div>`).join('')
       : p.b;
-    const art = p.art && PROLOGUE_ART[p.art] ? `<div class="proart">${PROLOGUE_ART[p.art]}</div>` : '';
+    const art = p.art ? artBlock(p.art) : '';
     openModal(`
       <header><span class="t">${esc(p.t)}</span><span class="m">序章 ${i + 1} / ${PROLOGUE.length}</span></header>
       <div class="steps">${PROLOGUE.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
@@ -783,10 +811,10 @@
   }
 
   /* ---------------- 弹窗 ---------------- */
-  const BEAT_ART = { firstflight: 'runway', visit: 'yard', notebook: 'shop', board: 'board' };
+  const BEAT_ART = { firstflight: 'runway', visit: 'yard', notebook: 'desk', board: 'board' };
   function beatArt(id) {
     const k = BEAT_ART[id];
-    return k && PROLOGUE_ART[k] ? `<div class="proart">${PROLOGUE_ART[k]}</div>` : '';
+    return k ? artBlock(k) : '';
   }
 
   function showStory() {
