@@ -856,5 +856,29 @@
     ],
     "methodDisclosure": "浏览器内用 dispatchEvent 派发 click 到真实控件，走真实事件处理器与判定；不是指针输入，也不是直接调用 passRoom 或写 localStorage",
     "testRun": "node tests/check.js → 661 passed / 0 failed"
+  },
+  "pointerEvidence2026_11_23": {
+    "attemptDate": "2026-11-23",
+    "tool": "browser_click（真实指针点击）",
+    "result": "blocked",
+    "detail": "该会话内 browser_click 对 #btnStart/#btnBackMap/[data-pc] 全部返回 502 sandbox_internal_error，连普通按钮也无法点击；页面本身正常（evaluate 可用、导航可用）",
+    "consequence": "19 间真实指针闭环无法在本轮完成，按约定标 C，不写成 completed",
+    "A_confirmed": [
+      "落地页→开始旅程→地图节点→进入 r-c-major 的路径由真实点击触发成功（点击后 state.view=room, roomId=r-c-major）",
+      "校记卡字节：qa/evidence/room-card-r-c-major.html，2065 字节，sha256 efd9c377937248d50fa839e2e0b933f64400e4566dc66343bc85b60637be273a，UTF-8 中文可读，含 Avatar SVG、房名、城区、掌握、校记、署名，无外链",
+      "巡演与掌握度真实存在：startTour/buildTour/tourAdvance/leaveTour/resumeTour/masteryAfterPass 均为可调用函数，地图有 #tourStart 与掌握汇总",
+      "存档键包含 cleared/seals/records/signed/mastery/evidence/tour/tourRuns"
+    ],
+    "B_statePipeline": [
+      "19 间通关管线（passRoom）与 661 条断言",
+      "掌握度三档与巡演流程（上一轮浏览器验证）"
+    ],
+    "C_unverified": [
+      "19 间真实点击闭环（本轮被工具 502 阻塞）",
+      "360/390/412 真实移动设备触控（本轮只有桌面视口 resize，不冒充手机）",
+      "五项人耳听检",
+      "校记卡在浏览器中重新打开的可视渲染（只校验了文件字节）",
+      "存档刷新/退出恢复的本轮抽样（沿用往轮与此前记录）"
+    ]
   }
 }
