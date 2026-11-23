@@ -180,6 +180,33 @@ E.decideOffer(v3, 'alt', true);
 E.commit(v3);
 assert(discHigh < v3.slots[0].disc, '关系好应拿到更浅的折扣');
 
+/* --- P0-A 经济正确性 --- */
+const econ = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+E.setFinance(econ, 'gov');
+const er = E.commit(econ);
+assert(er.cashStart === 2.0, 'cashStart 应为提交前现金 2.0，实际 ' + er.cashStart);
+assert(er.cashEnd === er.cashStart + 11.0 - 0.7 - 0.06, '季报终值应等于 起点+融资-研发-利息，实际 ' + er.cashEnd);
+assert(Math.abs(er.cashEnd - econ.cash) < 1e-9, 'cashEnd 必须等于结算后的真实现金');
+
+const snap = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+E.setFinance(snap, 'gov');
+E.buyEngines(snap, 12);
+const quoted = snap.pending.enginesCost;
+snap.enginePrice = 0.385;                 // 下单后涨价事件
+E.commit(snap);
+assert(Math.abs(quoted - 12 * 0.35 * 0.30) < 1e-9, '下单时单价快照应为 0.35');
+assert(snap.engineOrders[0].unit === 0.35, '在途订单单价应锁定 0.35，实际 ' + snap.engineOrders[0].unit);
+
+const deriv = E.newGame({ seed: 20260419, seat: 'main', route: 'derivative' });
+assert(deriv.needs.d3 === 2 && deriv.needs.t1 === 2 && deriv.needs.f2 === 1, '改型路线应下调三项工作量');
+assert(deriv.rdRate < 0.6, '改型路线研发应更便宜');
+
+const done = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+E.setFinance(done, 'gov');
+done.pending.assign = { d3: 3 };
+const dr = E.commit(done);
+assert(dr.notes.some((n) => n.indexOf('系统布置与数字样机') >= 0), '完成工作项应写入 doneNow 记录');
+
 /* --- 助理引导 --- */
 assert(E.ASSIST && E.ASSIST.steps.length >= 8, '助理脚本应有 8 步以上，实际 ' + (E.ASSIST.steps || []).length);
 assert(E.ASSIST.steps.every((x) => x.ops.length <= 2), '每步只给不超过两个选择');

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "1eca5e6452d3adde",
+  "buildHash": "2d2e4e191c51bf06",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
-  "startedAt": "2026-11-23T08:45:00Z",
+  "startedAt": "2026-11-23T09:30:00Z",
   "inputTrace": [
     {
       "step": 1,
@@ -111,9 +111,7 @@
         "extraVisuals": [
           "qa/evidence/17-assistant-430.png",
           "qa/evidence/01-tech.png",
-          "qa/evidence/11-ui-1280x720.png",
-          "qa/evidence/14-customer.png",
-          "qa/evidence/15-rocket.png"
+          "qa/evidence/11-ui-1280x720.png"
         ],
         "fiveGatesVisible": true,
         "fiveDeptsVisible": true,
@@ -192,7 +190,12 @@
         "tutorialTurns": "1-4",
         "echoes": 3,
         "assistantSeasons": "1-3",
-        "steps": 9
+        "steps": 9,
+        "economyFixes": [
+          "cashStart snapshot",
+          "engine price snapshot"
+        ],
+        "teaching": "主指挥条 + 1 必做 + 结算预览"
       }
     },
     "outcome": {

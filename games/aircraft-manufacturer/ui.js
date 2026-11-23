@@ -553,7 +553,7 @@
     const hint = nextHint();
     $('.acts').innerHTML = `
       <header><span class="t">本季决议</span><span class="m mono">第 ${S.turn} 季 · 只能提交一次</span></header>
-      ${hint ? `<div class="hintbar"><b>下一步</b>${esc(hint)}</div>` : ''}
+      ${hint ? `<div class="hintbar lead"><b>本季指挥</b>${esc(hint)}</div>` : ''}
       ${guided ? guideBlock() : ''}
       <div class="tabs">${tabs.map((t) => `<button data-tab="${t.k}" class="${tab === t.k ? 'on' : ''}">${t.n}${dot(t.k)}</button>`).join('')}</div>
       <div class="tabbody">${tabBody()}</div>`;
@@ -561,10 +561,14 @@
   function guideBlock() {
     const list = E.suggest(S);
     if (!list.length) return '';
+    const must = list[0];
+    const later = list.slice(1, 3);
     return `<div class="guide">
-      <div class="gh"><span>本季建议</span><em>可一键执行，执行后仍能改</em></div>
-      ${list.map((g, i) => `<div class="gitem"><span class="gnum">${i + 1}</span><span class="gtext"><b>${esc(g.label)}</b><em>${esc(g.detail)}</em></span></div>`).join('')}
-      <button class="btn sm" data-run="all">一键执行这 ${list.length} 条</button>
+      <div class="gh"><span>本季必做</span><em>先做这一条</em></div>
+      <div class="gitem must"><span class="gnum">1</span><span class="gtext"><b>${esc(must.label)}</b><em>${esc(must.detail)}</em></span></div>
+      <button class="btn sm" data-run="must">执行这条</button>
+      ${later.length ? `<div class="gh sub"><span>可以考虑</span><em>不做也能过</em></div>` +
+        later.map((g, i) => `<div class="gitem sub"><span class="gnum">·</span><span class="gtext"><b>${esc(g.label)}</b><em>${esc(g.detail)}</em></span></div>`).join('') : ''}
     </div>`;
   }
 
@@ -648,6 +652,7 @@
           <div class="oh"><span class="who">${esc(o.cust)}<em>${esc(o.tag)}</em></span><span class="qty">${o.qty} 架</span></div>
           <div class="meta mono">窗口 T${o.win[0]}–T${o.win[1]} · 折扣 ${Math.round(o.disc * 100)}%${S.discShift ? ' → 实付 ' + Math.round(Math.min(0.3, o.disc + S.discShift) * 100) + '%' : ''} · 定金 5%</div>
           <div class="note">${esc(o.note)}</div>
+          ${offerFeasibility(o)}
           <div class="acts2">
             <button class="btn" data-offer="${o.id}" data-accept="1">接受</button>
             <button class="btn ghost" data-offer="${o.id}" data-accept="0">拒绝</button>
@@ -683,6 +688,22 @@
     return `
       <div class="note">航司不是抽象买家：它们有机队规模、有关系、有运行反馈。关系越好，下一单的议价空间越大；可靠性低于 55 会掉信誉。</div>
       ${rows}`;
+  }
+
+  function offerFeasibility(o) {
+    const first = S.pc ? Math.max(S.turn, o.win[0]) : null;
+    const engCover = Math.floor(S.engines / 2) + S.engineOrders.reduce((a, x) => a + x.qty, 0) / 2;
+    const cap = E.capacity(S) || 1;
+    const quarters = Math.max(0, o.win[1] - (first || S.turn) + 1);
+    const canBuild = Math.round(quarters * cap);
+    let verdict = 'safe', label = '安全';
+    if (!S.pc && o.win[1] <= 14) { verdict = 'bad'; label = '不可行'; }
+    else if (engCover < o.qty * 0.5 || canBuild < o.qty * 0.6) { verdict = 'tight'; label = '紧张'; }
+    return '<div class="ofeas ' + verdict + '">' +
+      '<span>最早交付 <b class="mono">' + (first ? 'T' + first : '待 PC') + '</b></span>' +
+      '<span>发动机覆盖 <b class="mono">' + Math.floor(engCover) + ' 架</b></span>' +
+      '<span>窗口内可造 <b class="mono">' + canBuild + ' 架</b></span>' +
+      '<em>' + label + '</em></div>';
   }
 
   function techBody() {
@@ -890,7 +911,9 @@
     const done = goals.filter((g) => g.on).length;
     host.innerHTML = `
       <span class="tt">新手目标 · 第 ${S.turn} 季</span>
-      <span class="tg">${goals.map((g, i) => `<span class="ti ${g.on ? 'on' : ''}">${g.on ? '✓' : i + 1} ${esc(g.t)}</span>`).join('')}</span>
+      <span class="tg">${goals.map((g, i) => g.go
+        ? `<button class="ti ${g.on ? 'on' : ''}" data-go="${g.go}">${g.on ? '✓' : i + 1} ${esc(g.t)}</button>`
+        : `<span class="ti ${g.on ? 'on' : ''}">${g.on ? '✓' : i + 1} ${esc(g.t)}</span>`).join('')}</span>
       <span class="tp mono">${done}/${goals.length}</span>
       <button class="tx" data-tut="off" title="关闭新手引导">知道了</button>`;
   }
@@ -1257,6 +1280,31 @@
     if (t.dataset.route) { RS.route = t.dataset.route; return showRocket(); }
     if (t.dataset.toggle === 'guide') { guided = !guided; S.tutOn = guided; render(); return; }
     if (t.dataset.tut === 'off') { S.tutOn = false; render(); return; }
+    if (t.dataset.go) { tab = t.dataset.go; sfx('tab'); render(); return; }
+    if (t.dataset.preview) {
+      const est = estimate();
+      const rd = S.rdRate || 0.6;
+      const interest = (S.flags.govPaid || S.flags.bankPaid) ? (S.finance === 'gov' ? 0.06 : 0.036) : 0;
+      const out = rd + interest + (S.pending.enginesCost || 0) +
+        (S.pending.expand ? 2.4 : 0) + (S.pending.visits.length * 0.4) +
+        (S.pending.overtime ? 0.12 : 0) +
+        Object.keys(S.pending.hires).reduce((a, k) => a + S.pending.hires[k] * 0.8, 0);
+      const price = 4.2 * 0.85;
+      openModal('<header><span class="t">本季结算预览</span><span class="m">仅估算，以提交为准</span></header>' +
+        '<div class="body"><div class="replist">' +
+        '<div><span>预计交付</span><span class="mono">' + est + ' 架</span></div>' +
+        '<div><span>预计收款（交付 50%+尾款）</span><span class="mono pos">+' + (est * price * 0.5).toFixed(2) + ' 亿</span></div>' +
+        '<div><span>预计支出（研发/利息/采购/扩线/招聘）</span><span class="mono neg">−' + out.toFixed(2) + ' 亿</span></div>' +
+        '<div><span>期末现金（估算）</span><span class="mono">' + (S.cash + est * price * 0.5 - out).toFixed(2) + ' 亿</span></div>' +
+        '</div><p style="font-size:9.5px;color:var(--ink-40);margin-top:6px">不含本季新签单定金与事件影响。</p></div>' +
+        '<footer><button class="btn" data-close>关闭</button></footer>');
+      return;
+    }
+    if (t.dataset.run === 'must') {
+      const g = E.suggest(S)[0];
+      if (g) { try { g.run(S); } catch (e) { /* ignore */ } }
+      render(); toast('已执行必做项，其余可以自己调。'); return;
+    }
     if (t.dataset.run === 'all') {
       let n = 0;
       E.suggest(S).forEach((g) => { try { if (g.run(S)) n += 1; } catch (e) { /* 忽略 */ } });

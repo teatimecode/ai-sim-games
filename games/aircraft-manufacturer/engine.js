@@ -269,7 +269,7 @@
       progress: 0,
       engines: 0,
       engineOrders: [],
-      pending: { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [] },
+      pending: { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [], enginesCost: 0, engineUnit: 0.35 },
       lastReport: null,
       flags: {}
     };
@@ -415,10 +415,13 @@
     return { ok: true };
   }
   function buyEngines(s, qty) {
-    const cost = qty * (s.enginePrice || 0.35) * 0.30;
+    const unit = s.enginePrice || 0.35;          // 下单瞬间的单价
+    const cost = qty * unit * 0.30;
     if (s.cash < cost) return { ok: false, reason: '现金不足 ' + cost.toFixed(2) + ' 亿' };
     s.pending.engines += qty;
-    return { ok: true, cost: cost };
+    s.pending.enginesCost = (s.pending.enginesCost || 0) + cost;   // 价格快照
+    s.pending.engineUnit = unit;
+    return { ok: true, cost: cost, unit: unit };
   }
   function decideOffer(s, id, accept) {
     const o = s.offers.filter(function (x) { return x.id === id; })[0];
@@ -715,7 +718,8 @@
 
   /* ---------- 结算 ---------- */
   function commit(s) {
-    const r = { turn: s.turn, lines: [], notes: [], events: [], penalties: [], attribution: null };
+    const cashStart = s.cash;
+    const r = { turn: s.turn, cashStart: cashStart, lines: [], notes: [], events: [], penalties: [], attribution: null };
     const p = s.pending;
     const t = s.turn;
 
@@ -768,9 +772,9 @@
     }
 
     if (p.engines > 0) {
-      const c = p.engines * 0.35 * 0.30;
+      const c = p.enginesCost != null ? p.enginesCost : p.engines * (s.enginePrice || 0.35) * 0.30;
       s.cash -= c;
-      s.engineOrders.push({ arrive: t + 3, qty: p.engines });
+      s.engineOrders.push({ arrive: t + 3, qty: p.engines, unit: p.engineUnit || s.enginePrice || 0.35 });
       r.lines.push({ k: '锁定发动机 ' + p.engines + ' 台（30% 预付）', v: -c });
       r.notes.push(p.engines + ' 台发动机将在第 ' + (t + 3) + ' 季到货。');
     }
@@ -1003,7 +1007,6 @@
       }
     });
 
-    r.cashStart = r.cashStart === undefined ? s.cash : r.cashStart;
     r.cashEnd = s.cash;
     r.deliveredTotal = s.delivered;
     r.capacity = cap;
@@ -1015,7 +1018,7 @@
     s.log.push(r);
 
     s.turn = t + 1;
-    s.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [] };
+    s.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [], enginesCost: 0, engineUnit: 0.35 };
     s.offers.forEach(function (o) { if (o.turn === s.turn) o.open = true; });
     s.offers.forEach(function (o) { if (o.open && !o.decided && s.turn - o.turn > 3) o.decided = 'expired'; });
     if (s.turn <= CONFIG.maxTurn) applyTurnStart(s);
