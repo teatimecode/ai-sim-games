@@ -176,6 +176,12 @@
       text: '白总监的电话从一周一次变成一天一次。她说排班表已经排到明年夏天，晚一季就要重排。你在电话里只能说：快了。',
       note: '信誉 −1，但订单窗口不变。',
       apply: function (s) { s.rep = Math.max(0, s.rep - 1); } },
+    { turn: 12, id: 'echo-lock', when: function (s) { return !!s.echoFlags['dinner:a']; }, type: 'note', title: '早到的那批发动机',
+      text: '第二批发动机比原计划早了一个月到货，工位上第一次没有等件。当初在饭桌上答应"提前锁"，现在变成了实打实的时间。',
+      note: '信誉 +2。', apply: function (s) { s.rep = Math.min(100, s.rep + 2); } },
+    { turn: 16, id: 'echo-review', when: function (s) { return !!s.echoFlags['review:a']; }, type: 'note', title: '干净的包线',
+      text: '审定组翻完试飞报告，只问了一个问题就签了。对面的人说：你们的数据少见地齐。你想起首飞前那两周的推迟。',
+      note: '质量 +3。', apply: function (s) { s.quality = Math.min(100, s.quality + 3); } },
     { turn: 17, id: 'board', type: 'note', title: '董事会前夜',
       text: '董事长在走廊里拦住你，只问了一句：如果重来一次，你还会选这个座级吗。你想了几秒，说会。他点点头走了。',
       note: '无机制影响。这一句是给你自己的。',
@@ -225,6 +231,15 @@
       seat: seat,
       route: route,
       needs: null,
+      echoes: [],
+      echoFlags: {},
+      airlines: {
+        '高原航空': { key: 'alt', fleet: 12, got: 0, rel: 50, rel9: null, note: '高原支线的老牌网络航司，机队正在换喷气' },
+        '横跨航空': { key: 'trx', fleet: 8, got: 0, rel: 45, rel9: null, note: '新兴市场高速扩张，融资最脆弱' },
+        '蓝湾航空': { key: 'blb', fleet: 10, got: 0, rel: 55, rel9: null, note: '单一机型低成本，最在意每座成本' },
+        '远洋租机': { key: 'ocn', fleet: 6, got: 0, rel: 50, rel9: null, note: '经营租赁，只看残值和流转' }
+      },
+      visits: [],
       rdRate: route === 'derivative' ? 0.5 : 0.7,
       tc: null,
       pc: null,
@@ -254,7 +269,7 @@
       progress: 0,
       engines: 0,
       engineOrders: [],
-      pending: { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null },
+      pending: { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [] },
       lastReport: null,
       flags: {}
     };
@@ -428,6 +443,15 @@
   }
   function setExtra(s, on) { s.pending.extra = !!on; }
 
+  function visitAirline(s, name) {
+    const a = s.airlines[name];
+    if (!a) return { ok: false, reason: '没有这个客户' };
+    if (s.pending.visits.indexOf(name) >= 0) return { ok: false, reason: '本季已经拜访过了' };
+    if (s.cash < 0.4) return { ok: false, reason: '现金不足 0.4 亿' };
+    s.pending.visits.push(name);
+    return { ok: true, cost: 0.4 };
+  }
+
   function applyTurnStart(s) {
     s.event = null;
     s.stopTurn = null;
@@ -442,7 +466,7 @@
     const upId = s.schedule[s.turn + 1];
     const up = upId ? eventById(upId) : null;
     s.eventWarn = up ? { title: up.title, text: up.warn } : null;
-    const beat = BEATS.filter(function (x) { return x.turn === s.turn; })[0];
+    const beat = BEATS.filter(function (x) { return x.turn === s.turn && (!x.when || x.when(s)); })[0];
     s.story = beat ? { id: beat.id, type: beat.type, title: beat.title, text: beat.text, note: beat.note, a: beat.a, b: beat.b } : null;
   }
 
@@ -593,6 +617,38 @@
     return out.slice(0, 5);
   }
 
+
+  /* ---------- 第三章垂直切片：箭体成本模型（供 UI 与测试共用） ---------- */
+  const ROCKET = {
+    price: 6.0, contract: 12, quarters: 8,
+    expendable: { unit: 4.2, dev: 0, devSpan: 0, rate: 2 },
+    reusable: { unit: 1.32, dev: 18, devSpan: 3, rate: 3 }
+  };
+  function rocketCalc(route, startCash) {
+    const p = ROCKET[route];
+    if (!p) return null;
+    const rows = [];
+    let cash = startCash == null ? 8 : startCash;
+    let flown = 0;
+    let minCash = cash;
+    for (let q = 1; q <= ROCKET.quarters; q += 1) {
+      const dev = p.dev > 0 && q <= p.devSpan ? p.dev / p.devSpan : 0;
+      const canFly = q > (p.dev > 0 ? p.devSpan : 0);
+      const n = canFly ? Math.min(p.rate, ROCKET.contract - flown) : 0;
+      const gross = n * (ROCKET.price - p.unit);
+      cash += gross - dev;
+      flown += n;
+      minCash = Math.min(minCash, cash);
+      rows.push({ q: q, dev: dev, n: n, gross: gross, cash: cash });
+    }
+    return { rows: rows, cash: cash, flown: flown, unit: p.unit, dev: p.dev, minCash: minCash };
+  }
+  function rocketBreakEven() {
+    const marginExp = ROCKET.price - ROCKET.expendable.unit;
+    const marginReuse = ROCKET.price - ROCKET.reusable.unit;
+    return ROCKET.reusable.dev / (marginReuse - marginExp);
+  }
+
   /* ---------- 结算 ---------- */
   function commit(s) {
     const r = { turn: s.turn, lines: [], notes: [], events: [], penalties: [], attribution: null };
@@ -636,6 +692,17 @@
     });
     if (hireCount) r.lines.push({ k: '增聘 ' + hireCount + ' 人', v: -CONFIG.hireCost * hireCount });
 
+    if (p.visits && p.visits.length) {
+      const cost = p.visits.length * 0.4;
+      s.cash -= cost;
+      p.visits.forEach(function (n) {
+        if (s.airlines[n]) s.airlines[n].rel = Math.min(100, s.airlines[n].rel + 8);
+      });
+      r.lines.push({ k: '客户拜访 ×' + p.visits.length, v: -cost });
+      r.notes.push('拜访了 ' + p.visits.join('、') + '，关系改善，后续议价空间变大。');
+      s.visits = s.visits.concat(p.visits);
+    }
+
     if (p.engines > 0) {
       const c = p.engines * 0.35 * 0.30;
       s.cash -= c;
@@ -664,7 +731,9 @@
     p.accept.forEach(function (id) {
       const o = s.offers.filter(function (x) { return x.id === id; })[0];
       if (!o) return;
-      const disc = Math.min(0.30, Math.max(0.05, o.disc + s.discShift));
+      const relA = s.airlines[o.cust];
+      const relBonus = relA ? Math.max(0, (relA.rel - 50)) / 100 * 0.03 : 0;
+      const disc = Math.min(0.30, Math.max(0.05, o.disc + s.discShift - relBonus));
       const a = o.win[0], b = o.win[1];
       const qty = Math.max(4, Math.round(o.qty * (s.qtyScale || 1)));
       for (let i = 0; i < qty; i += 1) {
@@ -726,6 +795,8 @@
         const pick = p.story || 'a';
         const choice = pick === 'a' ? beat.a : beat.b;
         s.storyLog.push({ turn: t, id: beat.id, pick: pick, label: choice.label });
+        s.echoFlags[beat.id + ':' + pick] = true;
+        s.echoes.push({ turn: t, id: beat.id, pick: pick, title: beat.title });
         if (beat.id === 'dinner') {
           if (pick === 'a') {
             s.enginePrice = 0.35 * 0.92;
@@ -741,6 +812,19 @@
         }
         r.story = { title: beat.title, pick: pick, label: choice.label };
         r.notes.push('【决定】' + beat.title + ' → ' + choice.label);
+        // 跨季度回响
+        if (beat.id === 'dinner' && pick === 'a' && t >= 9) {
+          s.rep = Math.min(100, s.rep + 1);
+          r.notes.push('【回响】晚宴上答应的提前锁件，让第二批发动机早到一季，试飞节奏没被打断。');
+        }
+        if (beat.id === 'review' && pick === 'a') {
+          s.quality = Math.min(100, s.quality + 2);
+          r.notes.push('【回响】推迟的那两周换来了更干净的包线数据，后面没再返工。');
+        }
+        if (beat.id === 'ip' && pick === 'a') {
+          s.rep = Math.min(100, s.rep + 2);
+          r.notes.push('【回响】补飞的那个架次后来救了一版符合性文件，局方没有再追问。');
+        }
       }
     }
 
@@ -799,6 +883,7 @@
       s.tail.push({ at: t + 2, amount: pr * CONFIG.tailRate, cust: x.cust });
       x.got = t;
       s.delivered += 1;
+      if (s.airlines[x.cust]) s.airlines[x.cust].got += 1;
       if (x.plan >= t) s.rep = Math.min(100, s.rep + 2);
       else { lateCount += 1; s.rep -= 3; }
     }
@@ -843,6 +928,17 @@
     });
     if (!p.overtime) s.quality = Math.min(100, s.quality + 2);
 
+    /* 航司侧的运行反馈：交付过的客户每季给出可靠性评分，回流到信誉 */
+    Object.keys(s.airlines).forEach(function (k) {
+      const a = s.airlines[k];
+      if (a.got > 0) {
+        const score = Math.max(0, Math.min(100, Math.round(s.quality - 8 + (a.rel - 50) * 0.25)));
+        a.rel9 = score;
+        if (score >= 70) s.rep = Math.min(100, s.rep + 1);
+        else if (score < 55) s.rep = Math.max(0, s.rep - 1);
+      }
+    });
+
     r.cashStart = r.cashStart === undefined ? s.cash : r.cashStart;
     r.cashEnd = s.cash;
     r.deliveredTotal = s.delivered;
@@ -855,7 +951,7 @@
     s.log.push(r);
 
     s.turn = t + 1;
-    s.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null };
+    s.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [] };
     s.offers.forEach(function (o) { if (o.turn === s.turn) o.open = true; });
     s.offers.forEach(function (o) { if (o.open && !o.decided && s.turn - o.turn > 3) o.decided = 'expired'; });
     if (s.turn <= CONFIG.maxTurn) applyTurnStart(s);
@@ -891,6 +987,7 @@
 
   const api = {
     CONFIG: CONFIG, DEPTS: DEPTS, WORKS: WORKS, GATES: GATES, OFFERS: OFFERS, EVENT_POOL: EVENT_POOL, BEATS: BEATS, needOf: needOf,
+    ROCKET: ROCKET, rocketCalc: rocketCalc, rocketBreakEven: rocketBreakEven,
     newGame: newGame, applyTurnStart: applyTurnStart,
     capacity: capacity, effectiveCycle: effectiveCycle, unitCost: unitCost,
     slotPrice: slotPrice, slotPrice2: slotPrice2,
@@ -901,7 +998,7 @@
     openOffers: openOffers, activeSlots: activeSlots, totalBacklog: totalBacklog, pdpLiability: pdpLiability,
     toggleOvertime: toggleOvertime, requestExpand: requestExpand, requestHire: requestHire,
     buyEngines: buyEngines, decideOffer: decideOffer, canRelease: canRelease, requestRelease: requestRelease, setStory: function (s, k) { s.pending.story = k; return { ok: true }; },
-    setFinance: setFinance, setExtra: setExtra, commit: commit
+    setFinance: setFinance, setExtra: setExtra, visitAirline: visitAirline, commit: commit
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

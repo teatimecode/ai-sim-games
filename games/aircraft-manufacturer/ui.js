@@ -9,6 +9,44 @@
   let S = E.newGame();
   let tab = 'tech';
   let guided = true;
+
+  /* ---------------- 音效：WebAudio 合成，无外部文件 ---------------- */
+  const AUD = { ctx: null, muted: false, vol: 0.5, failed: false };
+  function audioCtx() {
+    if (AUD.ctx || AUD.failed) return AUD.ctx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { AUD.failed = true; return null; }
+      AUD.ctx = new AC();
+    } catch (e) { AUD.failed = true; }
+    return AUD.ctx;
+  }
+  function tone(freq, dur, type, gain, delay) {
+    const ctx = audioCtx();
+    if (!ctx) return;
+    try {
+      if (ctx.state === 'suspended') ctx.resume();
+      const t0 = ctx.currentTime + (delay || 0);
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, (gain || 0.06) * AUD.vol), t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch (e) { /* 静默降级 */ }
+  }
+  function sfx(kind) {
+    if (AUD.muted) return;
+    if (kind === 'click') tone(760, 0.05, 'sine', 0.04);
+    else if (kind === 'tab') tone(520, 0.05, 'triangle', 0.045);
+    else if (kind === 'ok') { tone(660, 0.09, 'sine', 0.05); tone(990, 0.12, 'sine', 0.04, 0.09); }
+    else if (kind === 'warn') tone(200, 0.16, 'square', 0.035);
+    else if (kind === 'deliver') { tone(523, 0.09, 'sine', 0.05); tone(659, 0.09, 'sine', 0.05, 0.09); tone(784, 0.16, 'sine', 0.05, 0.18); }
+    else if (kind === 'alarm') { tone(140, 0.18, 'sawtooth', 0.04); tone(120, 0.2, 'sawtooth', 0.035, 0.2); }
+  }
   if (S && S.tutOn === undefined) S.tutOn = true;
   let dept = 'design';
   let seen = {};
@@ -388,6 +426,8 @@
       </div>
       <div class="tools">
         <button data-toggle="guide" class="${guided ? 'on' : ''}">引导 ${guided ? '开' : '关'}</button>
+        <button data-audio="toggle">声 ${AUD.muted ? '关' : '开'}</button>
+        <input class="volin" type="range" min="0" max="100" value="${Math.round(AUD.vol * 100)}" data-audio="vol" title="音量">
         <button data-open="codex">图鉴</button>
         <button data-open="legend">图例</button>
         <button data-open="help">规则</button>
@@ -443,7 +483,7 @@
   function renderActions() {
     const tabs = [
       { k: 'tech', n: '技术流程' }, { k: 'line', n: '产线' },
-      { k: 'buy', n: '采购' }, { k: 'biz', n: '商务' }
+      { k: 'buy', n: '采购' }, { k: 'biz', n: '商务' }, { k: 'cust', n: '客户' }
     ];
     const dot = (k) => {
       if (k === 'tech' && S.turn <= C.maxTurn) {
@@ -462,8 +502,7 @@
       ${hint ? `<div class="hintbar"><b>下一步</b>${esc(hint)}</div>` : ''}
       ${guided ? guideBlock() : ''}
       <div class="tabs">${tabs.map((t) => `<button data-tab="${t.k}" class="${tab === t.k ? 'on' : ''}">${t.n}${dot(t.k)}</button>`).join('')}</div>
-      <div class="tabbody">${tabBody()}</div>
-      <div class="actsfoot">${judgeBlock()}</div>`;
+      <div class="tabbody">${tabBody()}</div>`;
   }
   function guideBlock() {
     const list = E.suggest(S);
@@ -483,6 +522,12 @@
     if (idle) return '还有部门产能没用完，把本季的人力派到能推进的工作上。';
     if (E.openOffers(S).length) return '有 ' + E.openOffers(S).length + ' 张订单等你决定。';
     if (S.pc && S.engines < 4 && S.engineOrders.length === 0) return '发动机库存见底，下季可能无件可装。';
+    const g = E.nextGate(S);
+    if (g) {
+      const w = E.workById(g.work);
+      const miss = w.req.filter((r) => !E.workDone(S, r)).map((r) => E.workById(r).n);
+      return '下一道门：' + g.n + '。' + (miss.length ? '缺 ' + miss.join('、') + '。' : g.hint + '。');
+    }
     return null;
   }
 
@@ -535,6 +580,7 @@
           它是最长的前置期：下单到到货 3 季，而且只能整批锁。你在第 13 季想多交 5 架，能救你的动作其实发生在第 10 季。
         </div>`;
     }
+    if (tab === 'cust') return custBody();
     // biz
     const offers = S.offers.filter((o) => o.open && !o.decided);
     const decided = S.offers.filter((o) => o.decided && o.decided !== 'expired');
@@ -563,12 +609,29 @@
   }
 
   /* ---------------- 技术流程 ---------------- */
-  function techBody() {
-    const gates = E.gateState(S);
-    const gateBar = gates.map((g, i) => {
-      const cls = g.done ? 'done' : (i === gates.findIndex((x) => !x.done) ? 'now' : '');
-      return `<div class="gate ${cls}"><span class="gi mono">${g.id}</span><span class="gn">${g.n}</span></div>`;
+  function custBody() {
+    const rows = Object.keys(S.airlines).map(function (name) {
+      const a = S.airlines[name];
+      const visited = S.pending.visits.indexOf(name) >= 0;
+      const relW = Math.max(0, Math.min(100, a.rel));
+      return `<div class="cust">
+        <div class="ch"><b>${esc(name)}</b><em>${esc(a.note)}</em></div>
+        <div class="cstats">
+          <span>机队 <b class="mono">${a.fleet}</b></span>
+          <span>已交付 <b class="mono">${a.got}</b></span>
+          <span>关系 <b class="mono">${a.rel}</b></span>
+          <span>可靠性 <b class="mono">${a.rel9 == null ? '—' : a.rel9}</b></span>
+        </div>
+        <div class="cbar"><i style="width:${relW}%"></i></div>
+        <button class="btn sm" data-visit="${esc(name)}" ${visited ? 'disabled' : ''}>${visited ? '本季已拜访' : '拜访 0.4 亿 · 关系 +8'}</button>
+      </div>`;
     }).join('');
+    return `
+      <div class="note">航司不是抽象买家：它们有机队规模、有关系、有运行反馈。关系越好，下一单的议价空间越大；可靠性低于 55 会掉信誉。</div>
+      ${rows}`;
+  }
+
+  function techBody() {
     const rows = E.DEPTS.map((d) => {
       const cap = E.deptCap(S, d.id);
       const left = E.deptLeft(S, d.id);
@@ -609,7 +672,6 @@
       ? `<button class="btn sm" data-hire="${dept}">增聘 1 ${def.unit} · ${C.hireCost} 亿</button>`
       : '<span class="wok">已满编</span>';
     return `
-      <div class="gatebar">${gateBar}</div>
       <div class="depts">${rows}</div>
       <div class="depthead">
         <span class="dh">${def.n}</span>
@@ -711,7 +773,11 @@
     else if (S.eventWarn) html = `<div class="ev warn"><b>下季预告 · ${esc(S.eventWarn.title)}</b>${esc(S.eventWarn.text)}</div>`;
     else html = '<div class="ev empty"><b>暂无事件</b>事件会提前一季预告，不会突然扣你产能。</div>';
     const head = S.event ? '本季生效' : S.eventWarn ? '下季预告' : '提前 1 季预告';
-    $('.events').innerHTML = `<header><span class="t">事件</span><span class="m">${head}</span></header>${html}`;
+    const echoes = (S.echoes || []).slice(-2);
+    const echoHtml = echoes.length
+      ? '<div class="echoline">回响：' + echoes.map(function (e) { return '第' + e.turn + '季「' + esc(e.title) + '」'; }).join(' · ') + '</div>'
+      : '';
+    $('.events').innerHTML = `<header><span class="t">事件</span><span class="m">${head}</span></header>${html}${echoHtml}`;
   }
 
   function renderLast() {
@@ -904,6 +970,41 @@
       <footer><button class="btn" data-close>关闭</button></footer>`, true);
   }
 
+
+  /* ---------------- 第三章垂直切片：箭体 ---------------- */
+  const RS = { route: null, launched: false };
+  function rocketCalc(route) { return E.rocketCalc(route, 8); }
+
+  function showRocket() {
+    const calc = RS.route ? rocketCalc(RS.route) : null;
+    const body = !RS.route
+      ? `<p>主线结束，总装线空出来了。同一批工装、同一批结构工程师，可以转向箭体。</p>
+         <p>这一步只问一件事：<b>做一次性，还是做可复用？</b></p>
+         <div class="choice" data-route="expendable"><h4>一次性 · 单发 4.2 亿</h4><p>不追加研制，季度产能决定交付。毛利薄，但不赌未来。</p></div>
+         <div class="choice" data-route="reusable"><h4>可复用 · 研制 18 亿，单发 1.32 亿</h4><p>前三个季度只有支出没有收入；一旦飞起来，单发毛利翻倍。</p></div>`
+      : `<p>${RS.route === 'reusable' ? '可复用路线：前三季纯投入，第四季开始回收。' : '一次性路线：每季稳定出货，现金流平缓。'}</p>
+         <div class="replist">
+           ${calc.rows.map((r) => `<div><span>第 ${r.q} 季${r.dev ? ' · 研制 ' + r.dev.toFixed(0) + ' 亿' : ''}${r.n ? ' · 交付 ' + r.n + ' 发' : ''}</span><span class="mono ${r.gross - r.dev >= 0 ? 'pos' : 'neg'}">${(r.cash).toFixed(1)} 亿</span></div>`).join('')}
+         </div>
+         <div class="attr">八季后：交付 ${calc.flown} 发，账上 ${calc.cash.toFixed(1)} 亿，最低点 ${calc.minCash.toFixed(1)} 亿。单发成本 ${calc.unit} 亿。
+         ${RS.route === 'reusable'
+            ? '研制 18 亿 ÷（4.68 − 1.80）≈ 6.25 发回本。同一份 12 发合同，可复用最终多赚 16 亿 —— 但中途现金会掉到 ' + calc.minCash.toFixed(0) + ' 亿，得先找到人替你垫。'
+            : '不需要赌订单量，也不会中途失血；代价是同样的合同少赚 16 亿。'}</div>
+         <p style="font-size:9.5px;color:var(--ink-40)">这是垂直切片：不含 TC/PC、客户谈判、发射工位排产与复用翻修，也不进入主线存档。只验证「一次性 vs 可复用」的成本交叉点与现金流风险。</p>`;
+    openModal(`
+      <header><span class="t">第三章 · 把总装能力转向箭体</span><span class="m">垂直切片</span></header>
+      <div class="body">${body}</div>
+      <footer>
+        ${RS.route ? '<button class="btn ghost" id="rsBack">重选</button>' : ''}
+        <button class="btn" data-close>${RS.route ? '回到结项' : '先不进入'}</button>
+      </footer>`, true);
+    document.querySelectorAll('[data-route]').forEach(function (el) {
+      el.onclick = function () { RS.route = el.dataset.route; showRocket(); };
+    });
+    const back = document.getElementById('rsBack');
+    if (back) back.onclick = function () { RS.route = null; showRocket(); };
+  }
+
   function showLegend() {
     openModal(`
       <header><span class="t">图例与符号</span><button class="x" data-close>×</button></header>
@@ -1056,7 +1157,8 @@
           <li>${S.finance === 'gov' ? '你拿了政府基金，所以背了 25 架的交付承诺。' : '你只拿了银行贷款，没有承诺压力，但钱也少了一半多。'}</li>
         </ul>
       </div>
-      <footer><button class="btn" id="again">再开一局</button></footer>`, true);
+      <footer><button class="btn ghost" id="rocket">进入第三章 · 箭体</button><button class="btn" id="again">再开一局</button></footer>`, true);
+    $('#rocket').onclick = () => { RS.route = null; showRocket(); };
     $('#again').onclick = () => { closeModal(); restart(); };
   }
 
@@ -1067,6 +1169,9 @@
     const prev = S.delivered;
     const r = E.commit(S);
     r.gained = S.delivered - prev;
+    if (S.stopTurn === r.turn) sfx('alarm');
+    else if (r.gained > 0) sfx('deliver');
+    else sfx('ok');
     render();
     showSettlement(r);
   }
@@ -1077,7 +1182,7 @@
   }
 
   document.addEventListener('click', (ev) => {
-    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run]');
+    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run],[data-visit],[data-audio],[data-route]');
     if (!t) return;
     if (t.dataset.pick) {
       prologuePick[t.dataset.pick] = t.dataset.val;
@@ -1092,6 +1197,7 @@
     if (t.dataset.assist === 'auto') { E.autoAssign(S); render(); return toast('已按关键路径自动派工，你可以继续调整。'); }
     if (t.dataset.codex) return showCodex(t.dataset.codex);
     if (t.dataset.story) { E.setStory(S, t.dataset.story); closeModal(); render(); return; }
+    if (t.dataset.route) { RS.route = t.dataset.route; return showRocket(); }
     if (t.dataset.toggle === 'guide') { guided = !guided; S.tutOn = guided; render(); return; }
     if (t.dataset.tut === 'off') { S.tutOn = false; render(); return; }
     if (t.dataset.run === 'all') {
@@ -1105,13 +1211,19 @@
     if (t.dataset.open === 'help') return showHelp();
     if (t.dataset.open === 'restart') return restart();
     if (t.dataset.bay !== undefined) return showBay(+t.dataset.bay);
-    if (t.dataset.tab) { tab = t.dataset.tab; return render(); }
+    if (t.dataset.tab) { tab = t.dataset.tab; sfx('tab'); return render(); }
     if (t.dataset.dept) { dept = t.dataset.dept; return render(); }
     if (t.dataset.buy) {
       const res = E.buyEngines(S, +t.dataset.buy);
       if (!res.ok) toast(res.reason, 'warn'); else toast('已锁定 ' + t.dataset.buy + ' 台，' + (S.turn + 3) + ' 季后到货。');
       return render();
     }
+    if (t.dataset.visit) {
+      const r = E.visitAirline(S, t.dataset.visit);
+      if (!r.ok) toast(r.reason, 'warn'); else toast('已安排拜访，提交后扣 0.4 亿。');
+      return render();
+    }
+    if (t.dataset.audio === 'toggle') { AUD.muted = !AUD.muted; render(); return; }
     if (t.dataset.act === 'ot') { E.toggleOvertime(S); return render(); }
     if (t.dataset.act === 'expand') {
       const res = E.requestExpand(S);
@@ -1161,6 +1273,10 @@
       delivered: `<b>已交付 ${S.delivered} / ${C.target}</b><br>第 ${C.maxTurn} 季结束时 ≥${C.target} 架且现金为正才算通关。`
     };
     tip(k, map[key] || '');
+  });
+  document.addEventListener('input', (ev) => {
+    const el = ev.target.closest('[data-audio="vol"]');
+    if (el) { AUD.vol = Number(el.value) / 100; if (!AUD.muted) tone(660, 0.06, 'sine', 0.05); }
   });
   document.addEventListener('mouseout', (ev) => { if (ev.target.closest('[data-tip]')) hideTip(); });
 
