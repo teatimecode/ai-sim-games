@@ -630,6 +630,32 @@ ok('F: diploma carries mastery counts', m.diplomaFacts({ cleared: {}, mastery: {
 ok('F: district panel shows local mastery', src.indexOf('这一区：理解') !== -1);
 
 
+/* ---------- 21. 亲和度收尾 ---------- */
+const fault = m.faultNarrative;
+ok('F: no narrative without a failure', fault({ kind: 'counterpoint' }, null) === null);
+const cpNarr = fault({ kind: 'counterpoint' }, { slot: 8, label: '第 9 音 · FS-CAD' });
+ok('F: narrative says what the player did', /你刚把这一列的对位音逐格填满了/.test(cpNarr), cpNarr);
+ok('F: narrative names where it broke', /断在/.test(cpNarr) && /FS-CAD/.test(cpNarr), cpNarr);
+ok('F: narrative points to the rule source', /规则/.test(cpNarr), cpNarr);
+ok('F: narrative does not leak the whole answer', cpNarr.indexOf('参考解') === -1);
+const rhythmNarr = fault({ kind: 'rhythm' }, { bar: 2, label: '第 3 小节 · M-SUM' });
+ok('F: rhythm narrative uses bar number', /第 3 小节/.test(rhythmNarr), rhythmNarr);
+
+ok('F: first two rooms carry a plain-language gloss', playable.slice(0, 2).every((r) => !!r.plain));
+ok('F: gloss avoids unexplained jargon first', /石头 = 一个音高/.test(playable[0].plain || ''));
+ok('F: gloss is rendered in the mission card', src.indexOf("plain.className = 'mission-plain'") !== -1);
+ok('F: fault note is rendered first in the mark list', src.indexOf("nl.className = 'fault-note'") !== -1);
+
+const cardFacts = m.roomCardFacts({ signed: '甲', mastery: { 'r-c-major': 'proficient' }, records: {} }, 'r-c-major');
+ok('F: room card knows the room', cardFacts.room === '十二块石头', JSON.stringify(cardFacts));
+ok('F: room card carries mastery', cardFacts.level === '熟练');
+ok('F: room card carries a record slot', !!cardFacts.record);
+ok('F: room card keeps a blank signature blank', m.roomCardFacts({}, 'r-c-major').name === '（留白）');
+ok('F: unknown room gives no card', m.roomCardFacts({}, 'nope') === null);
+ok('F: room card can be downloaded', src.indexOf('function downloadRoomCard') !== -1);
+ok('F: room card sends nothing to a server', src.indexOf('fetch(') === -1);
+ok('F: room card is offered on the pass sheet', src.indexOf('存这张校记卡') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

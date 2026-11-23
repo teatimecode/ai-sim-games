@@ -814,6 +814,32 @@ function firstDiffOf(room) {
   return null;
 }
 
+var FAULT_WHAT = {
+  counterpoint: '你刚把这一列的对位音逐格填满了',
+  rhythm: '你刚把这一行的时值块铺满了',
+  harmony: '你刚把这一串和弦选完了',
+  scale: '你刚选好了一组石头、指定了主音',
+  set: '你刚把这组音排了序',
+  pop: '你刚接完这一圈的进行',
+  compass: '你刚走到目标调',
+  form: '你刚把曲式标记排完'
+};
+
+// 先说“你做了什么 / 哪里断了”，再让下面的批注给规则出处
+function faultNarrative(room, diff) {
+  if (!room || !diff) return null;
+  var what = FAULT_WHAT[room.kind] || '你刚提交了这一步';
+  var where = diff.label || '';
+  if (room.kind === 'counterpoint' && Number.isInteger(diff.slot)) {
+    var prev = diff.slot > 0 ? '上一个音和它之间' : '起手这个音';
+    return what + '，断在' + prev + '：' + where.replace(/^第 \d+ 音 · /, '') + '。规则的出处写在下面的批注里。';
+  }
+  if (room.kind === 'rhythm' && Number.isInteger(diff.bar)) {
+    return what + '，断在第 ' + (diff.bar + 1) + ' 小节的时值总和：' + where.replace(/^第 \d+ 小节 · /, '') + '。规则出处见批注。';
+  }
+  return what + '，断在' + where + '。规则出处见下面的批注。';
+}
+
 function playCompare(room) {
   var plan = referencePlan(room);
   if (!plan) return;
@@ -931,6 +957,56 @@ function diplomaMarkup() {
     '<ul>' + records + '</ul>' +
     '<div class="d-foot">规则与固定旋律取自 Open Music Theory（CC BY-SA 4.0），谱面与环城为原创。<br>声音由浏览器 Web Audio 实时合成，本页不含任何音频文件。</div>' +
   '</div>';
+}
+
+function roomCardFacts(s, id) {
+  s = s || state;
+  var room = ROOM_INDEX[id];
+  if (!room) return null;
+  var rec = s.records && s.records[room.district];
+  return {
+    room: room.title,
+    district: (districtById(room.district) || {}).name || '',
+    mastered: (s.mastery && s.mastery[id]) || null,
+    level: MASTERY_LABEL[(s.mastery && s.mastery[id]) || ''] || '已校',
+    record: (rec && rec.choice) ? rec.choice : '未记',
+    name: s.signed || '（留白）'
+  };
+}
+
+function roomCardMarkup(id) {
+  var f = roomCardFacts(state, id);
+  if (!f) return '';
+  var av = avatarSVG(avatarOf(), 68).outerHTML;
+  return '<div class="diploma-page room-card">' +
+    '<h1>' + f.room + '</h1>' +
+    '<div class="d-sub">' + f.district + ' · 环城记谱公会</div>' +
+    '<div class="d-head">' + av + '<div><div>这一页由</div><div class="d-name">' + f.name + '</div>' +
+    '<div class="d-sub" style="margin-top:8px">掌握 · ' + f.level + '</div></div></div>' +
+    '<div class="d-sub">这一页的校记</div><ul><li>' + f.record + '</li></ul>' +
+    '<div class="d-foot">声音由浏览器实时合成，本页不含音频文件。</div>' +
+  '</div>';
+}
+
+function downloadRoomCard(id) {
+  var html = '<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8">' +
+    '<title>五度环 · ' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : '校记卡') + '</title><style>' +
+    'body{margin:0;background:#fff;color:#211c18;font-family:"Songti SC","Iowan Old Style",Georgia,serif}' +
+    '.diploma-page{max-width:180mm;margin:14mm auto;padding:10mm;border:1px solid #c9b9a4}' +
+    'h1{font-size:20px;margin:0 0 4px}.d-sub{font-size:11px;color:#7a6c5c;letter-spacing:.04em}' +
+    '.d-head{display:flex;gap:12px;align-items:center;margin:12px 0}.d-name{font-size:17px}' +
+    'ul{list-style:none;padding:0;margin:6px 0 0;font-size:12px;line-height:1.9}' +
+    '.d-foot{margin-top:16px;padding-top:8px;border-top:1px solid #c9b9a4;font-size:10px;color:#7a6c5c}' +
+    '</style></head><body>' + roomCardMarkup(id) + '</body></html>';
+  var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '五度环-校记卡-' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : 'room') + '.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1200);
 }
 
 function renderDiploma() {
@@ -1322,6 +1398,7 @@ var ROOMS = [
   {
     id: 'r-c-major', district: 'quarry', kind: 'scale', title: '十二块石头',
     meta: '拼音阶 · C 大调', char: '维斯',
+    plain: '石头 = 一个音高。五度环 = 把十二个音按“往上纯五度”的顺序排成一圈，所以环上相邻的两块听起来最贴。这一关不用写谱，只要把七块石头挑出来。',
     line: '先把石头认全。别急着写谱，认不出石头的人写不出站得住的线。',
     teach: {
       title: '七块石头与调号',
@@ -1336,7 +1413,8 @@ var ROOMS = [
     target: { tonic: 0, pcs: [0, 2, 4, 5, 7, 9, 11], label: 'C 大调', degrees: ['C', 'D', 'E', 'F', 'G', 'A', 'B'] }
   },
   {
-    id: 'r-meter', district: 'quarry', kind: 'rhythm', title: '把桥板铺满',
+    id: 'r-meter', district: 'quarry', kind: 'rhythm',
+    plain: '拍 = 心跳的那一下，小节 = 每几下一个循环。这一关只要把一排格子填到每小节的总时值正好对上。', title: '把桥板铺满',
     meta: '节奏 · 4/4 单拍子', char: '维斯',
     line: '拍子归营造司管，可桥得你自己铺。一小节十六个最小单位，一格都不能空。',
     teach: {
@@ -3779,6 +3857,13 @@ function buildMission(room, p) {
   goal.textContent = g.goal;
   sec.appendChild(goal);
 
+  if (room.plain) {
+    var plain = document.createElement('p');
+    plain.className = 'mission-plain';
+    plain.textContent = room.plain;
+    sec.appendChild(plain);
+  }
+
   if (g.steps && g.steps.length) {
     var ol = document.createElement('ol');
     ol.className = 'mission-steps';
@@ -3966,6 +4051,13 @@ function renderMarkList(items, emptyText) {
   list.innerHTML = '';
   if (state.diff && items && items.length && !(items.length === 1 && items[0].label === '第一处不同')) {
     items = [{ label: '第一处不同', message: state.diff.label }].concat(items);
+  }
+  var narr = state.diff ? faultNarrative(ROOM_INDEX[state.roomId], state.diff) : null;
+  if (narr) {
+    var nl = document.createElement('li');
+    nl.className = 'fault-note';
+    nl.textContent = narr;
+    list.appendChild(nl);
   }
   if (!items.length) {
     var li = document.createElement('li');
@@ -5162,6 +5254,9 @@ function showVerdict(o) {
   (o.actions || []).forEach(function (a) {
     actions.appendChild(mkBtn(a.label, a.cls || 'btn', a.fn));
   });
+  if (passLike && state.roomId && ROOM_INDEX[state.roomId]) {
+    actions.appendChild(mkBtn('存这张校记卡', 'btn btn-quiet', function () { downloadRoomCard(state.roomId); }));
+  }
   if (state.tour && state.tour.active) {
     actions.appendChild(mkBtn(state.tour.done ? '看总结' : '下一关', 'btn', tourAdvance));
   }
@@ -5739,6 +5834,7 @@ if (typeof module !== 'undefined' && module.exports) {
     masteryAfterPass: masteryAfterPass, masteryCounts: masteryCounts, masteryOf: masteryOf,
     buildTour: buildTour, tourCurrent: tourCurrent, tourSummary: tourSummary,
     masteryEvidenceText: masteryEvidenceText, noteHintUse: noteHintUse, noteFault: noteFault,
+    faultNarrative: faultNarrative, roomCardFacts: roomCardFacts, roomCardMarkup: roomCardMarkup,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
     diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,

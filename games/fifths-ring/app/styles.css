@@ -678,3 +678,13 @@ body{
   .tour-bar{font-size:11px}
   .tour-bar .btn{min-height:36px}
 }
+
+.mission-plain{
+  margin:6px 0 2px;padding:7px 10px;border-left:2px solid #b9a88f;
+  background:rgba(255,255,255,.5);font-size:12px;line-height:1.65;color:#4a4036;
+}
+.fault-note{
+  margin:0 0 6px;padding:6px 9px;border-left:2px solid #a9502c;
+  background:rgba(255,255,255,.5);font-size:12px;line-height:1.65;color:#5a3a2c;
+}
+.diploma-page.room-card h1{font-size:19px}
