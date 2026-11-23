@@ -180,6 +180,32 @@ E.decideOffer(v3, 'alt', true);
 E.commit(v3);
 assert(discHigh < v3.slots[0].disc, '关系好应拿到更浅的折扣');
 
+/* --- 助理引导 --- */
+assert(E.ASSIST && E.ASSIST.steps.length >= 8, '助理脚本应有 8 步以上，实际 ' + (E.ASSIST.steps || []).length);
+assert(E.ASSIST.steps.every((x) => x.ops.length <= 2), '每步只给不超过两个选择');
+const walk = E.newGame({ seed: 20260419 });
+const seenIds = [];
+let guard = 0;
+while (guard++ < 30) {
+  const st = E.nextAssistStep(walk, seenIds);
+  if (!st) break;
+  seenIds.push(st.id);
+  if (st.id === 's1-money') walk.finance = 'gov';
+  if (st.id === 's1-assign') walk.pending.assign = { d3: 1 };
+  if (st.id === 's1-commit') { walk.pending.assign = {}; walk.turn = 2; }
+  if (st.id === 's2-path') walk.turn = 3;
+  if (st.id === 's3-customer') walk.turn = 4;
+}
+assert(seenIds.length === E.ASSIST.steps.length, '助理九步应可全部走完（无死循环），实际 ' + seenIds.length);
+assert(E.nextAssistStep(walk, seenIds) === null, '走完后不应再有步骤');
+
+/* --- 图片资源契约 --- */
+const assetsDir = resolve(ROOT, 'assets');
+assert(existsSync(resolve(assetsDir, 'README.md')), '缺少 assets/README.md 资源契约');
+const spec = readFileSync(resolve(assetsDir, 'README.md'), 'utf8');
+['prologue-yard.jpg', 'prologue-shop.jpg', 'prologue-notebook.jpg', 'prologue-board.jpg', 'prologue-runway.jpg', 'assistant.jpg']
+  .forEach((n) => assert(spec.indexOf(n) >= 0, '资源契约缺少 ' + n));
+
 /* --- 航天切片 --- */
 const re = E.rocketCalc('reusable');
 const ex = E.rocketCalc('expendable');
@@ -218,7 +244,7 @@ if (!existsSync(evidencePath)) {
   if (obs.restart && obs.restart.state) {
     assert(obs.restart.state.turn === 1 && obs.restart.state.delivered === 0, '实机重开未回到初态');
   }
-  ['01-tech', '04-ending', '05-restart', '11-ui-1280x720', '12-ui-900', '13-ui-430', '14-customer', '15-rocket'].forEach((n) => {
+  ['01-tech', '04-ending', '05-restart', '11-ui-1280x720', '14-customer', '15-rocket', '16-assistant-1440', '17-assistant-430'].forEach((n) => {
     const p = resolve(ROOT, 'qa/evidence/' + n + '.png');
     assert(existsSync(p) && statSync(p).size > 10000, '缺少实机截图 ' + n + '.png');
   });

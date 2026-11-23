@@ -420,3 +420,30 @@ button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer
 .cust .cbar i{position:absolute;left:0;top:0;height:4px;background:var(--teal)}
 .note{font-size:10.5px;line-height:1.6;color:var(--ink-55);border-left:2px solid var(--amber);padding:4px 8px;background:rgba(176,112,28,.05);margin-bottom:8px}
 .echoline{margin-top:6px;padding-top:5px;border-top:1px dotted var(--ink-20);font-size:9px;color:var(--ink-40);line-height:1.5}
+
+/* 项目助理 */
+.assisthost{position:fixed;left:18px;bottom:76px;z-index:70;max-width:480px}
+.assist{display:flex;gap:9px;align-items:flex-start}
+.avatar{width:46px;height:46px;flex:0 0 46px;border:1px solid var(--ink);background:#EFE9DB;overflow:hidden;position:relative}
+.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.8) sepia(.1)}
+.avatar svg{position:relative;display:block}
+.abubble{max-width:400px;background:var(--panel2);border:1px solid var(--ink);box-shadow:0 8px 24px rgba(22,34,43,.16);padding:9px 11px 8px;position:relative}
+.abubble::before{content:"";position:absolute;left:-6px;top:14px;width:10px;height:10px;background:var(--panel2);border-left:1px solid var(--ink);border-bottom:1px solid var(--ink);transform:rotate(45deg)}
+.awho{display:flex;align-items:baseline;gap:7px;margin-bottom:4px}
+.awho b{font-size:11px}
+.awho em{font-style:normal;font-size:9px;color:var(--ink-40);letter-spacing:.06em}
+.atext{font-size:11px;line-height:1.6;color:var(--ink)}
+.anext{font-size:10px;line-height:1.55;color:var(--ink-55);margin-top:4px;padding-left:8px;border-left:2px solid var(--amber)}
+.aops{display:flex;flex-direction:column;gap:4px;margin-top:7px;align-items:stretch}
+.abtn{font-size:10px;padding:4px 10px;border:1px solid var(--ink-20);color:var(--ink-55);background:var(--panel);white-space:nowrap;line-height:1.4;text-align:left;width:100%}
+.abtn:hover{border-color:var(--ink);color:var(--ink)}
+.abtn.main{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.abtn.ghost{border-color:transparent;color:var(--ink-40);padding-left:2px;width:auto}
+.alogitem{border-bottom:1px dotted var(--ink-20);padding:6px 0}
+.alogitem b{display:block;font-size:11px;font-weight:500}
+.alogitem span{font-size:10px;color:var(--ink-55)}
+@media (max-width:720px){
+  .assisthost{left:8px;right:8px;bottom:64px;max-width:none}
+  .avatar{width:38px;height:38px;flex:0 0 38px}
+  .atext{font-size:10.5px}
+}

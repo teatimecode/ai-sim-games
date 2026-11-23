@@ -10,6 +10,60 @@
   let tab = 'tech';
   let guided = true;
 
+  /* ---------------- 项目助理（RPG 式引导） ---------------- */
+  const ASSIST_UI = { seen: [], hidden: false, log: [] };
+  const AVATAR_SRC = 'assets/assistant.jpg';
+  function avatarSvg() {
+    return '<svg viewBox="0 0 96 96" width="100%" height="100%">' +
+      '<rect width="96" height="96" fill="#EFE9DB"/>' +
+      '<circle cx="48" cy="38" r="17" fill="#DCD3BF" stroke="#16222B" stroke-width="1.3"/>' +
+      '<path d="M31 35 q6 -14 17 -14 q11 0 17 14" fill="none" stroke="#16222B" stroke-width="1.3"/>' +
+      '<path d="M20 96 q4 -26 28 -26 q24 0 28 26 Z" fill="#D8CEB8" stroke="#16222B" stroke-width="1.3"/>' +
+      '<rect x="40" y="58" width="16" height="5" fill="#B0701C" opacity=".75"/>' +
+      '</svg>';
+  }
+  function assistCard() {
+    const st = E.nextAssistStep(S, ASSIST_UI.seen);
+    if (!st || ASSIST_UI.hidden || S.ending) return '';
+    const ops = st.ops.map(function (o, i) {
+      return '<button class="abtn' + (i === 0 ? ' main' : '') + '" data-assist-op="' + i + '">' + esc(o.t) + '</button>';
+    }).join('');
+    return '<div class="assist" data-step="' + st.id + '">' +
+      '<div class="avatar"><img src="' + AVATAR_SRC + '" alt="" onerror="this.remove()">' + avatarSvg() + '</div>' +
+      '<div class="abubble">' +
+      '<div class="awho"><b>' + esc(E.ASSIST.name) + '</b><em>' + esc(E.ASSIST.role) + ' · 第 ' + st.season + ' 季</em></div>' +
+      '<p class="atext">' + esc(st.text) + '</p>' +
+      '<p class="anext">' + esc(st.next) + '</p>' +
+      '<div class="aops">' + ops +
+      '<button class="abtn ghost" data-assist-op="skip">跳过引导</button>' +
+      '<button class="abtn ghost" data-assist-op="replay">回看</button></div>' +
+      '</div></div>';
+  }
+  function assistHandle(op) {
+    const st = E.nextAssistStep(S, ASSIST_UI.seen);
+    if (!st) return;
+    if (op === 'skip') { ASSIST_UI.hidden = true; render(); return; }
+    if (op === 'replay') { showAssistLog(); return; }
+    const act = st.ops[Number(op)];
+    ASSIST_UI.seen.push(st.id);
+    ASSIST_UI.log.push(st.id);
+    sfx('click');
+    if (act && act.tab) { tab = act.tab; }
+    if (st.id === 's3-end') ASSIST_UI.hidden = true;
+    render();
+  }
+  function showAssistLog() {
+    const lines = ASSIST_UI.log.map(function (id) {
+      const st = E.ASSIST.steps.filter(function (x) { return x.id === id; })[0];
+      return st ? '<div class="alogitem"><b>' + esc(st.text) + '</b><span>' + esc(st.next) + '</span></div>' : '';
+    }).join('');
+    openModal('<header><span class="t">林工说过的话</span><span class="m">回看</span></header>' +
+      '<div class="body">' + (lines || '<p>还没说什么。</p>') + '</div>' +
+      '<footer><button class="btn" data-close>关闭</button></footer>');
+  }
+
+
+
   /* ---------------- 音效：WebAudio 合成，无外部文件 ---------------- */
   const AUD = { ctx: null, muted: false, vol: 0.5, failed: false };
   function audioCtx() {
@@ -342,7 +396,7 @@
   }
   function finishPrologue() {
     S = E.newGame({ seed: S.seed, seat: prologuePick.seat, route: prologuePick.route });
-    S.tutOn = true; beatShown = 0;
+    S.tutOn = true; beatShown = 0; ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false;
     closeModal();
     render();
     showOnboard(0);
@@ -866,6 +920,8 @@
 
   function render() {
     renderHud(); renderTutorial(); renderLine(); renderActions(); renderOrders(); renderGates(); renderEvent(); renderLast(); renderFoot();
+    const host = document.querySelector('.assisthost');
+    if (host) host.innerHTML = assistCard();
     $('.commit').disabled = !!S.ending || modalOpen();
   }
 
@@ -1176,13 +1232,13 @@
     showSettlement(r);
   }
   function restart() {
-    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {}; S.tutOn = true; beatShown = 0;
+    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {}; S.tutOn = true; beatShown = 0; ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false;
     render();
     showOnboard(0);
   }
 
   document.addEventListener('click', (ev) => {
-    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run],[data-visit],[data-audio],[data-route]');
+    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run],[data-visit],[data-audio],[data-route],[data-assist-op]');
     if (!t) return;
     if (t.dataset.pick) {
       prologuePick[t.dataset.pick] = t.dataset.val;
@@ -1197,6 +1253,7 @@
     if (t.dataset.assist === 'auto') { E.autoAssign(S); render(); return toast('已按关键路径自动派工，你可以继续调整。'); }
     if (t.dataset.codex) return showCodex(t.dataset.codex);
     if (t.dataset.story) { E.setStory(S, t.dataset.story); closeModal(); render(); return; }
+    if (t.dataset.assistOp !== undefined) { assistHandle(t.dataset.assistOp); return; }
     if (t.dataset.route) { RS.route = t.dataset.route; return showRocket(); }
     if (t.dataset.toggle === 'guide') { guided = !guided; S.tutOn = guided; render(); return; }
     if (t.dataset.tut === 'off') { S.tutOn = false; render(); return; }
@@ -1296,6 +1353,14 @@
     settleNext: () => { const b = document.getElementById('settleNext'); if (b) b.click(); }
   };
 
+  // QA/截图入口：?skipIntro=1 直接进入第 1 季（跳过序章与融资弹窗），不影响正常流程
+  const SKIP_INTRO = /(?:^|[?&])skipIntro=1(?:&|$)/.test(location.search);
   render();
-  showPrologue(0);
+  if (SKIP_INTRO) {
+    E.setFinance(S, 'gov');
+    S.tutOn = true;
+    render();
+  } else {
+    showPrologue(0);
+  }
 })();
