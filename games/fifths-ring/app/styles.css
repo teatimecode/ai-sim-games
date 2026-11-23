@@ -656,3 +656,25 @@ body{
   .diploma-page{margin:0;box-shadow:none}
   @page{size:A4;margin:0}
 }
+
+/* ============ 复习巡演与掌握度 ============ */
+.tour-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:0 0 10px;padding:7px 10px;
+  border:1px solid var(--line,#d8cdbd);border-radius:2px;
+  background:rgba(255,255,255,.55);font-size:12px;color:#5a4e42;
+}
+.tour-bar-text{flex:1 1 auto;min-width:0}
+.tour-host{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
+.tour-counts{font-size:12px;color:#5a4e42}
+.tour-hint{font-size:12px;color:#8a7a68}
+.dp-mastery{margin:2px 0 8px;font-size:12px;color:#5a4e42}
+.verdict-mastery{
+  margin:8px 0 2px;padding:6px 10px;border-left:2px solid #7a6a56;
+  background:rgba(255,255,255,.5);font-size:12px;color:#4a4036;
+}
+.diploma-page .d-mastery{margin:10px 0 4px;font-size:11px;color:#4a4036;letter-spacing:.02em}
+@media (max-width:520px){
+  .tour-bar{font-size:11px}
+  .tour-bar .btn{min-height:36px}
+}

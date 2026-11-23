@@ -546,6 +546,90 @@ ok('C: diploma can be downloaded', src.indexOf('function downloadDiploma') !== -
 ok('C: diploma sends nothing to a server', src.indexOf('fetch(') === -1 && src.indexOf('XMLHttpRequest') === -1);
 ok('C: print hides the app shell', css.indexOf('.desk{display:none !important}') !== -1);
 
+/* ---------- 20. 掌握度与三关巡演 ---------- */
+const playable = rooms.filter((r) => r.kind !== 'locked');
+
+// 三层转移：只升不降，靠提示与违规证据判定
+ok('M: clean main pass is proficient', m.masteryAfterPass(null, { hints: 0, faults: 0 }, false) === 'proficient');
+ok('M: hinted pass is understanding', m.masteryAfterPass(null, { hints: 2, faults: 0 }, false) === 'understand');
+ok('M: faulted pass is understanding', m.masteryAfterPass(null, { hints: 0, faults: 3 }, false) === 'understand');
+ok('M: clean tour pass reaches transfer', m.masteryAfterPass('proficient', { hints: 0, faults: 0 }, true) === 'transfer');
+ok('M: hinted tour pass cannot reach transfer', m.masteryAfterPass('proficient', { hints: 1, faults: 0 }, true) === 'proficient');
+ok('M: tour pass moves at most one step', m.masteryAfterPass('understand', { hints: 0, faults: 0 }, true) === 'proficient');
+ok('M: transfer is never downgraded', m.masteryAfterPass('transfer', { hints: 9, faults: 9 }, true) === 'transfer');
+ok('M: repeated passes alone do not upgrade',
+  m.masteryAfterPass('understand', { hints: 0, faults: 1 }, false) === 'understand');
+ok('M: mastery is not derived from clear count',
+  src.indexOf('masteryAfterPass') !== -1 && src.indexOf('clearedCount') === -1);
+
+const mstate = { cleared: {}, mastery: {}, tourRuns: 0 };
+playable.slice(0, 5).forEach((r) => { mstate.cleared[r.id] = true; });
+mstate.mastery[playable[0].id] = 'understand';
+mstate.mastery[playable[1].id] = 'proficient';
+const mc = m.masteryCounts(mstate);
+ok('M: counts understanding', mc.understand === 1, JSON.stringify(mc));
+ok('M: counts proficiency', mc.proficient === 1, JSON.stringify(mc));
+ok('M: uncleared rooms are not counted', mc.transfer === 0 && mc.none === 3, JSON.stringify(mc));
+
+// 三关生成：不足三间给空态，不硬凑
+const thin = { cleared: {}, mastery: {}, tourRuns: 0 };
+thin.cleared[playable[0].id] = true;
+thin.cleared[playable[1].id] = true;
+const thinPlan = m.buildTour(thin);
+ok('T: fewer than three cleared rooms gives an empty state', thinPlan.ok === false && thinPlan.have === 2);
+ok('T: empty state says what is missing', src.indexOf('还不能巡演') !== -1);
+
+const plan = m.buildTour(mstate);
+ok('T: three rooms are planned', plan.ok === true && plan.rooms.length === 3, JSON.stringify(plan));
+ok('T: planned rooms are unique', new Set(plan.rooms).size === 3);
+ok('T: every planned room is already cleared',
+  plan.rooms.every((id) => mstate.cleared[id]));
+ok('T: every planned room is playable',
+  plan.rooms.every((id) => playable.some((r) => r.id === id)));
+const weakRoom = playable.find((r) => r.id === plan.rooms[0]);
+const weakestRank = Math.min.apply(null, playable.filter((r) => mstate.cleared[r.id]).map((r) => m.masteryOf(mstate, r.id) ? m.masteryAfterPass(m.masteryOf(mstate, r.id), { hints: 0, faults: 0 }, false) && 0 : 0));
+ok('T: weak slot holds a low-mastery room',
+  !m.masteryOf(mstate, weakRoom.id) || m.masteryOf(mstate, weakRoom.id) === 'understand', String(m.masteryOf(mstate, weakRoom.id)));
+ok('T: proficient slot holds a proficient room',
+  plan.slots[1] === 'proficient' && mstate.mastery[plan.rooms[1]] === 'proficient');
+const crossRoom = playable.find((r) => r.id === plan.rooms[2]);
+ok('T: cross slot is a different room', crossRoom.id !== weakRoom.id && crossRoom.id !== plan.rooms[1]);
+ok('T: cross slot prefers another district when one exists',
+  !playable.filter((r) => mstate.cleared[r.id] && r.district !== weakRoom.district).length ||
+  crossRoom.district !== weakRoom.district);
+
+// 确定性：同样的存档必得同样的三关，避免随机出无解题
+const planAgain = m.buildTour(JSON.parse(JSON.stringify(mstate)));
+ok('T: the same save always yields the same tour', JSON.stringify(planAgain) === JSON.stringify(plan));
+
+// 受控变化：换一轮只轮换起点，题面仍来自已验证房间
+const rotated = Object.assign({}, mstate, { tourRuns: 1 });
+const planB = m.buildTour(rotated);
+ok('T: a new round varies the tour', JSON.stringify(planB.rooms) !== JSON.stringify(plan.rooms));
+ok('T: variation still only uses cleared rooms',
+  planB.rooms.every((id) => mstate.cleared[id]) && new Set(planB.rooms).size === 3);
+
+// 退出与恢复
+ok('T: tour progress is persisted', src.indexOf('mastery: state.mastery, evidence: state.evidence, tour: state.tour') !== -1);
+ok('T: tour can be left without losing progress',
+  src.indexOf('function leaveTour') !== -1 && src.indexOf('state.tour.active = false') !== -1);
+ok('T: a paused tour survives a reload', src.indexOf('if (d.tour && Array.isArray(d.tour.rooms)') !== -1);
+ok('T: tour can be resumed', src.indexOf('function resumeTour') !== -1 && src.indexOf('继续巡演') !== -1);
+ok('T: summary lists hints and mastery changes',
+  src.indexOf('提示一共用了') !== -1 && src.indexOf('掌握变化') !== -1);
+ok('T: summary gives a next suggestion', src.indexOf('下一步建议') !== -1);
+
+// 音频不可用时巡演只走文字
+const summarySrc = src.slice(src.indexOf('function tourSummary'), src.indexOf('function endTour'));
+ok('T: tour summary does not touch audio', summarySrc.indexOf('ensureAudio') === -1 && summarySrc.indexOf('AudioContext') === -1);
+ok('T: tour bar is text only', src.indexOf('function renderTourBar') !== -1 && src.indexOf("label.className = 'tour-bar-text'") !== -1);
+
+// 亲和度：结算先说做了什么，再给规则出处
+ok('F: verdict shows mastery evidence', src.indexOf("'掌握 · ' + MASTERY_LABEL") !== -1);
+ok('F: diploma carries mastery counts', m.diplomaFacts({ cleared: {}, mastery: {} }).mastery !== undefined);
+ok('F: district panel shows local mastery', src.indexOf('这一区：理解') !== -1);
+
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

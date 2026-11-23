@@ -789,5 +789,32 @@
     "result": "19 / 19 cleared，六区 seals 全 true",
     "note": "个别条目在城区校记弹层时取到校记标题，cleared 均为真。"
   },
-  "regressionAfterABC": "落地页、随机化身、清除二次确认、试音重置均通过：清除后 cleared=0、形象重新生成、warmupDone 复位、CTA 回到「开始旅程」"
+  "regressionAfterABC": "落地页、随机化身、清除二次确认、试音重置均通过：清除后 cleared=0、形象重新生成、warmupDone 复位、CTA 回到「开始旅程」",
+  "masteryTour": {
+    "mastery_transitions": [
+      "clean main pass -> proficient",
+      "hinted/faulted pass -> understand",
+      "tour clean from proficient -> transfer",
+      "tour clean from understand -> proficient（一次最多升一层）",
+      "transfer 不回退"
+    ],
+    "tourGeneration": {
+      "insufficient": "2 间已校 -> 空态，按钮禁用，显示「已有 2 / 3 间」",
+      "sufficient": "弱项 r-c-major / 熟练 r-cp1 / 跨域 r-normal（不同城区且不同玩法）",
+      "deterministic": "同一存档两次生成完全一致",
+      "variation": "tourRuns+1 只改变起点，仍全部来自已校房"
+    },
+    "tourFlow": "进入第二关后退出 -> 地图显示「继续巡演 2/3」；刷新后仍可继续；恢复后进入第 2 关",
+    "tourSummary": "提示总数、三关掌握变化、下一步建议；不调用音频接口",
+    "regression19": "19 间房全部走通：cleared 19、seals 6、endingEligible true、掌握记录 19、校记页 19/19",
+    "realPass": "C 大调房真实点选 7 块石头并定主音，呈交后 cleared=true、掌握=熟练、结算显示「掌握 · 熟练（零提示、零违规）」",
+    "viewports": {
+      "768": "溢出 0，巡演条右边界 726",
+      "1280": "溢出 0，动作按钮均 ≥44"
+    },
+    "notVerified": [
+      "巡演手感（三关节奏是否合适）未真人评估",
+      "移动端巡演按钮触感未测"
+    ]
+  }
 }

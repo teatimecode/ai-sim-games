@@ -885,10 +885,18 @@ function diplomaFacts(s) {
     return { district: d.name, choice: (r && r.choice) ? r.choice : '未记' };
   });
   var total = ROOMS.filter(function (r) { return r.kind !== 'locked'; }).length;
+  var mc = { understand: 0, proficient: 0, transfer: 0 };
+  var cleared = s.cleared || {};
+  ROOMS.forEach(function (r) {
+    if (r.kind === 'locked' || !cleared[r.id]) return;
+    var m = (s.mastery && s.mastery[r.id]) || null;
+    if (m) mc[m]++;
+  });
   return {
     name: s.signed || '（留白）',
     done: Object.keys(s.cleared || {}).length,
     total: total,
+    mastery: mc,
     marks: marks,
     records: records
   };
@@ -918,6 +926,7 @@ function diplomaMarkup() {
       '<div class="d-sub" style="margin-top:10px">已完成 ' + done + ' / ' + total + ' 页 · ' + date + '</div></div>' +
     '</div>' +
     '<div class="d-marks">' + marks + '</div>' +
+    '<div class="d-mastery">掌握 · 理解 ' + facts.mastery.understand + ' · 熟练 ' + facts.mastery.proficient + ' · 迁移 ' + facts.mastery.transfer + '</div>' +
     '<div class="d-sub">六区校记</div>' +
     '<ul>' + records + '</ul>' +
     '<div class="d-foot">规则与固定旋律取自 Open Music Theory（CC BY-SA 4.0），谱面与环城为原创。<br>声音由浏览器 Web Audio 实时合成，本页不含任何音频文件。</div>' +
@@ -1953,7 +1962,11 @@ var state = {
   pendingRecord: null,
   compass: {},
   rhythm: {},
-  warmupDone: false
+  warmupDone: false,
+  mastery: {},
+  evidence: {},
+  tour: null,
+  tourRuns: 0
 };
 
 function totalSlots(level) {
@@ -1975,7 +1988,8 @@ function saveState() {
       seals: state.seals, signed: state.signed, started: state.started,
       avatar: state.avatar, avatarSeed: state.avatarSeed, avatarConfirmed: state.avatarConfirmed,
       hintTier: state.hintTier, records: state.records,
-      compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone
+      compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone,
+      mastery: state.mastery, evidence: state.evidence, tour: state.tour, tourRuns: state.tourRuns
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -1985,13 +1999,15 @@ function loadState() {
     var raw = window.localStorage.getItem(STORE_KEY);
     if (!raw) return;
     var d = JSON.parse(raw);
-    ['cp', 'scale', 'harmony', 'set', 'pop', 'form', 'cleared', 'seals', 'hintTier', 'records', 'compass', 'rhythm'].forEach(function (k) {
+    ['cp', 'scale', 'harmony', 'set', 'pop', 'form', 'cleared', 'seals', 'hintTier', 'records', 'compass', 'rhythm', 'mastery', 'evidence'].forEach(function (k) {
       if (d[k] && typeof d[k] === 'object') state[k] = d[k];
     });
     if (d.signed) state.signed = d.signed;
     if (d.started) state.started = true;
     if (d.avatar) state.avatar = d.avatar;
     if (d.warmupDone) state.warmupDone = true;
+    if (d.tour && Array.isArray(d.tour.rooms) && d.tour.rooms.length === 3) state.tour = d.tour;
+    if (Number.isInteger(d.tourRuns)) state.tourRuns = d.tourRuns;
     if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
@@ -2276,8 +2292,44 @@ function renderMap() {
     }
   }
 
+  renderTourEntry();
   renderDistrictPanel();
   saveState();
+}
+
+function renderTourEntry() {
+  var host = document.getElementById('tourHost');
+  if (!host) return;
+  host.innerHTML = '';
+  var counts = masteryCounts(state);
+  var owned = counts.understand + counts.proficient + counts.transfer;
+  var line = document.createElement('div');
+  line.className = 'tour-counts';
+  line.textContent = owned
+    ? '掌握：理解 ' + counts.understand + ' · 熟练 ' + counts.proficient + ' · 迁移 ' + counts.transfer
+    : '掌握：还没有记录，校完第一间房就会开始记。';
+  host.appendChild(line);
+
+  var t = state.tour;
+  if (t && t.rooms) {
+    var resume = mkBtn(t.done ? '看巡演总结' : '继续巡演 ' + Math.min(t.index + 1, 3) + '/3', 'btn btn-mini', resumeTour);
+    resume.id = 'tourResume';
+    host.appendChild(resume);
+    var quit = mkBtn('退出巡演', 'btn btn-quiet btn-mini', leaveTour);
+    host.appendChild(quit);
+    return;
+  }
+  var plan = buildTour(state);
+  var btn = mkBtn(plan.ok ? '三关巡演 · 约 5 分钟' : '三关巡演 · 需先校完 3 间', 'btn btn-mini', startTour);
+  btn.id = 'tourStart';
+  btn.disabled = !plan.ok;
+  host.appendChild(btn);
+  if (!plan.ok) {
+    var hint = document.createElement('span');
+    hint.className = 'tour-hint';
+    hint.textContent = '已有 ' + plan.have + ' / 3 间';
+    host.appendChild(hint);
+  }
 }
 
 function renderDistrictPanel() {
@@ -2299,6 +2351,19 @@ function renderDistrictPanel() {
   desc.className = 'dp-desc';
   desc.textContent = d.desc;
   panel.appendChild(desc);
+
+  var dRooms = playableRoomsOfDistrict(d.id).filter(function (r) { return state.cleared[r.id]; });
+  if (dRooms.length) {
+    var dm = { understand: 0, proficient: 0, transfer: 0 };
+    dRooms.forEach(function (r) {
+      var m = masteryOf(state, r.id);
+      if (m) dm[m]++;
+    });
+    var dline = document.createElement('div');
+    dline.className = 'dp-mastery';
+    dline.textContent = '这一区：理解 ' + dm.understand + ' · 熟练 ' + dm.proficient + ' · 迁移 ' + dm.transfer;
+    panel.appendChild(dline);
+  }
 
   var idrow = document.createElement('div');
   idrow.className = 'panel-identity';
@@ -3204,6 +3269,7 @@ function focusTarget(room) {
 function useHint(room) {
   var h = nextHint(room);
   state.hintTier[room.id] = h.tier;
+  noteHintUse(room);
   saveState();
 
   var line = document.getElementById('avatarSay');
@@ -3447,6 +3513,10 @@ function enterRoom(id) {
   state.roomId = id;
   state.view = 'room';
   state.district = room.district;
+  if (!(state.tour && state.tour.active)) {
+    state.evidence[id] = { hints: 0, faults: 0 };
+    state._faultFlag = false;
+  }
   renderRoom();
   if (!state.warmupDone) openWarmup();
   saveState();
@@ -3860,6 +3930,10 @@ function renderRoom() {
 
   var p = roomProgress(room);
   state.diff = roomHasFailure(room) ? firstDiffOf(room) : null;
+  var _fault = !!state.diff;
+  if (_fault && !state._faultFlag) noteFault(room);
+  state._faultFlag = _fault;
+  renderTourBar();
   body.appendChild(buildMission(room, p));
 
   var work = document.createElement('div');
@@ -5077,18 +5151,292 @@ function showVerdict(o) {
     });
     body.appendChild(ul);
   }
+  if (passLike && state.lastMastery && state.lastMastery.id === state.roomId) {
+    var ml = document.createElement('div');
+    ml.className = 'verdict-mastery';
+    ml.textContent = '掌握 · ' + MASTERY_LABEL[state.lastMastery.level] + '（' + masteryEvidenceText(state.roomId) + '）';
+    body.appendChild(ml);
+  }
   var actions = $('sheetActions');
   actions.innerHTML = '';
   (o.actions || []).forEach(function (a) {
     actions.appendChild(mkBtn(a.label, a.cls || 'btn', a.fn));
   });
+  if (state.tour && state.tour.active) {
+    actions.appendChild(mkBtn(state.tour.done ? '看总结' : '下一关', 'btn', tourAdvance));
+  }
   $('veil').hidden = false;
 }
 
 function hideVerdict() { $('veil').hidden = true; }
 
+
+/* ================= 15z. 掌握度与复习巡演 ================= */
+
+var MASTERY_ORDER = { understand: 1, proficient: 2, transfer: 3 };
+var MASTERY_LABEL = { understand: '理解', proficient: '熟练', transfer: '迁移' };
+var TOUR_SLOT_LABEL = { weak: '薄弱项', proficient: '熟练项', cross: '跨域项' };
+
+function masteryOf(s, id) {
+  s = s || state;
+  return (s.mastery && s.mastery[id]) || null;
+}
+
+function masteryRank(s, id) {
+  return MASTERY_ORDER[masteryOf(s, id)] || 0;
+}
+
+// 三层只升不降；证据来自提示次数与本轮出现过的违规，而不是通关次数
+function masteryAfterPass(prev, ev, inTour) {
+  if (prev === 'transfer') return 'transfer';
+  var clean = !!ev && ev.hints === 0 && ev.faults === 0;
+  if (inTour && clean) return prev === 'proficient' ? 'transfer' : 'proficient';
+  if (clean) return 'proficient';
+  return prev || 'understand';
+}
+
+function masteryCounts(s) {
+  s = s || state;
+  var out = { understand: 0, proficient: 0, transfer: 0, none: 0 };
+  var cleared = s.cleared || {};
+  ROOMS.forEach(function (r) {
+    if (r.kind === 'locked' || !cleared[r.id]) return;
+    var m = masteryOf(s, r.id);
+    out[m || 'none']++;
+  });
+  return out;
+}
+
+function evidenceOf(s, id) {
+  s = s || state;
+  if (!s.evidence) s.evidence = {};
+  if (!s.evidence[id]) s.evidence[id] = { hints: 0, faults: 0 };
+  return s.evidence[id];
+}
+
+function noteHintUse(room) {
+  if (!room) return;
+  if (state.tour && state.tour.active) {
+    if (state.tour.attempt) state.tour.attempt.hints++;
+  } else {
+    evidenceOf(state, room.id).hints++;
+  }
+}
+
+function noteFault(room) {
+  if (!room) return;
+  if (state.tour && state.tour.active) {
+    if (state.tour.attempt) state.tour.attempt.faults++;
+  } else {
+    evidenceOf(state, room.id).faults++;
+  }
+}
+
+function tourCandidates(s) {
+  s = s || state;
+  return ROOMS.filter(function (r) {
+    return r.kind !== 'locked' && !!s.cleared[r.id];
+  });
+}
+
+// 三关组合：一薄弱、一熟练、一跨域。排序确定，按巡演次数轮换起点，不引入未验证的随机题
+function buildTour(s) {
+  s = s || state;
+  var pool = tourCandidates(s);
+  if (pool.length < 3) {
+    return { ok: false, reason: 'insufficient', have: pool.length, need: 3, pool: pool };
+  }
+  var byId = function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; };
+  var ranked = pool.slice().sort(function (a, b) {
+    return masteryRank(s, a.id) - masteryRank(s, b.id) || byId(a, b);
+  });
+  var shift = (s.tourRuns || 0) % ranked.length;
+  ranked = ranked.slice(shift).concat(ranked.slice(0, shift));
+
+  var weak = ranked[0];
+  var rest = ranked.filter(function (r) { return r.id !== weak.id; });
+  var prof = rest.filter(function (r) { return masteryOf(s, r.id) === 'proficient'; })[0] || rest[0];
+  var rest2 = rest.filter(function (r) { return r.id !== prof.id; });
+  var cross = rest2.filter(function (r) { return r.district !== weak.district && r.kind !== weak.kind; })[0]
+    || rest2.filter(function (r) { return r.district !== weak.district; })[0]
+    || rest2[0];
+  if (!weak || !prof || !cross) {
+    return { ok: false, reason: 'insufficient', have: pool.length, need: 3, pool: pool };
+  }
+  return {
+    ok: true,
+    rooms: [weak.id, prof.id, cross.id],
+    slots: ['weak', 'proficient', 'cross'],
+    titles: [weak.title, prof.title, cross.title]
+  };
+}
+
+function tourCurrent() {
+  var t = state.tour;
+  if (!t || !t.active) return null;
+  return ROOM_INDEX[t.rooms[t.index]] || null;
+}
+
+function startTour() {
+  var plan = buildTour(state);
+  if (!plan.ok) {
+    showVerdict({
+      eyebrow: '复习',
+      title: '还不能巡演',
+      paras: ['巡演要有三间已经校过的房才组得起来，你现在有 ' + plan.have + ' 间。',
+        '先把这一区的房间校完，再回来点「三关巡演」。'],
+      actions: [{ label: '知道了', cls: 'btn btn-quiet', fn: hideVerdict }]
+    });
+    return plan;
+  }
+  state.tour = {
+    active: true,
+    index: 0,
+    rooms: plan.rooms,
+    slots: plan.slots,
+    results: [],
+    hintsUsed: 0,
+    faults: 0,
+    before: plan.rooms.map(function (id) { return { id: id, mastery: masteryOf(state, id) }; }),
+    attempt: { hints: 0, faults: 0 }
+  };
+  saveState();
+  enterRoom(plan.rooms[0]);
+  return plan;
+}
+
+function tourPass(room) {
+  var t = state.tour;
+  var ev = t.attempt || { hints: 0, faults: 0 };
+  var before = masteryOf(state, room.id);
+  var after = masteryAfterPass(before, ev, true);
+  if (masteryRank(state, room.id) < MASTERY_ORDER[after]) state.mastery[room.id] = after;
+  t.results.push({ id: room.id, title: room.title, hints: ev.hints, faults: ev.faults, before: before, after: after });
+  t.hintsUsed += ev.hints;
+  t.faults += ev.faults;
+  state.lastMastery = { id: room.id, level: after };
+  if (t.index < 2) {
+    t.index++;
+    t.attempt = { hints: 0, faults: 0 };
+  } else {
+    t.done = true;
+  }
+  saveState();
+}
+
+function tourAdvance() {
+  var t = state.tour;
+  if (!t || !t.active) { renderMap(); return; }
+  hideVerdict();
+  if (t.done) { tourSummary(); return; }
+  var next = ROOM_INDEX[t.rooms[t.index]];
+  if (next) enterRoom(next.id);
+}
+
+function tourSummary() {
+  var t = state.tour;
+  var lines = t.results.map(function (r, i) {
+    var b = r.before ? MASTERY_LABEL[r.before] : '未记录';
+    var arrow = r.before === r.after ? b : b + ' → ' + MASTERY_LABEL[r.after];
+    return '第 ' + (i + 1) + ' 关 ' + r.title + ' ｜ ' + TOUR_SLOT_LABEL[t.slots[i]] + ' ｜ 提示 ' + r.hints + ' 次 ｜ ' + arrow;
+  });
+  var gained = t.results.filter(function (r) { return r.before !== r.after; }).length;
+  var weakest = t.results.slice().sort(function (a, b) {
+    return MASTERY_ORDER[a.after] - MASTERY_ORDER[b.after];
+  })[0];
+  var nextTip = weakest && weakest.after !== 'transfer'
+    ? '下一步建议：再走一次「' + weakest.title + '」，这次不点提示，能把迁移层补上。'
+    : '下一步建议：去地图挑一个还没到迁移的城区，按同样节奏再走三关。';
+  showVerdict({
+    eyebrow: '巡演毕',
+    title: '三关走完',
+    paras: ['提示一共用了 ' + t.hintsUsed + ' 次，掌握变化 ' + gained + ' 处。'],
+    list: lines.concat([nextTip]),
+    actions: [
+      { label: '回地图', cls: 'btn', fn: function () { hideVerdict(); endTour(); renderMap(); } },
+      { label: '再来一轮', cls: 'btn btn-quiet', fn: function () { hideVerdict(); endTour(); startTour(); } }
+    ]
+  });
+}
+
+function endTour() {
+  if (!state.tour) return;
+  state.tourRuns = (state.tourRuns || 0) + 1;
+  state.tour = null;
+  saveState();
+}
+
+function leaveTour() {
+  if (!state.tour || !state.tour.active) return;
+  hideVerdict();
+  state.tour.active = false;
+  saveState();
+  renderMap();
+}
+
+function resumeTour() {
+  var t = state.tour;
+  if (!t || !t.rooms) { startTour(); return; }
+  t.active = true;
+  if (!t.attempt) t.attempt = { hints: 0, faults: 0 };
+  if (t.done) { tourSummary(); return; }
+  enterRoom(t.rooms[t.index]);
+}
+
+function tourBarMarkup() {
+  var t = state.tour;
+  if (!t || !t.active) return null;
+  var cur = tourCurrent();
+  var ev = t.attempt || { hints: 0, faults: 0 };
+  var label = '巡演 ' + (Math.min(t.index + 1, 3)) + '/3';
+  var slot = TOUR_SLOT_LABEL[t.slots[t.index]] || '';
+  var done = t.results.some(function (r) { return cur && r.id === cur.id; });
+  var text = done
+    ? '这一关过了 · 提示 ' + ev.hints + ' 次'
+    : label + ' · ' + slot + (cur ? ' · ' + cur.title : '') + ' · 本关提示 ' + ev.hints + ' 次';
+  return { text: text, done: done, index: t.index };
+}
+
+function masteryEvidenceText(id) {
+  var ev = evidenceOf(state, id);
+  if (!ev.hints && !ev.faults) return '零提示、零违规';
+  var bits = [];
+  if (ev.hints) bits.push('提示 ' + ev.hints + ' 次');
+  if (ev.faults) bits.push('违规 ' + ev.faults + ' 次');
+  return bits.join('、');
+}
+
+function renderTourBar() {
+  var host = document.getElementById('tourBar');
+  if (!host) return;
+  var info = tourBarMarkup();
+  if (!info) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML = '';
+  var label = document.createElement('span');
+  label.className = 'tour-bar-text';
+  label.textContent = info.text;
+  host.appendChild(label);
+  if (info.done) {
+    var go = mkBtn(state.tour.done ? '看总结' : '下一关', 'btn btn-mini', tourAdvance);
+    host.appendChild(go);
+  }
+  var quit = mkBtn('退出巡演', 'btn btn-quiet btn-mini', leaveTour);
+  host.appendChild(quit);
+}
+
 function passRoom(room) {
+  if (state.tour && state.tour.active && state.tour.rooms.indexOf(room.id) !== -1) {
+    state.cleared[room.id] = true;
+    tourPass(room);
+    saveState();
+    return;
+  }
   state.cleared[room.id] = true;
+  state.lastMastery = { id: room.id, level: masteryAfterPass(masteryOf(state, room.id), evidenceOf(state, room.id), false) };
+  if (masteryRank(state, room.id) < MASTERY_ORDER[state.lastMastery.level]) {
+    state.mastery[room.id] = state.lastMastery.level;
+  }
   var pr = playableRoomsOfDistrict(room.district);
   if (pr.length && pr.every(function (r) { return state.cleared[r.id]; })) {
     state.seals[room.district] = true;
@@ -5388,6 +5736,9 @@ if (typeof module !== 'undefined' && module.exports) {
     barTicks: barTicks, endingEligible: endingEligible, TICK_LABEL: TICK_LABEL,
     createAudioController: createAudioController, audioDiagText: audioDiagText,
     referencePlan: referencePlan, playReference: playReference, roomHasFailure: roomHasFailure,
+    masteryAfterPass: masteryAfterPass, masteryCounts: masteryCounts, masteryOf: masteryOf,
+    buildTour: buildTour, tourCurrent: tourCurrent, tourSummary: tourSummary,
+    masteryEvidenceText: masteryEvidenceText, noteHintUse: noteHintUse, noteFault: noteFault,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
     diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,
