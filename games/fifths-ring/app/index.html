@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五度环 · 一座由音程承重的城</title>
+<link rel="stylesheet" href="styles.css?v=27">
+</head>
+<body>
+<div class="desk">
+
+  <header class="masthead">
+    <div class="masthead-left">
+      <div class="brand">五度环</div>
+      <p class="subtitle">一座由音程承重的城</p>
+    </div>
+    <div class="masthead-right">
+      <div class="seal-count">校记 <span id="sealCount">0</span> / <span id="sealTotal">6</span></div>
+      <button class="btn btn-quiet" id="btnLanding" type="button" hidden>首页</button>
+      <button class="btn btn-quiet" id="btnBackMap" type="button" hidden>回到环城</button>
+    </div>
+  </header>
+
+
+  <main class="board landing" id="viewLanding" hidden>
+    <section class="paper landing-paper">
+      <div class="landing-head">
+        <p class="landing-kicker">一座由音程承重的城</p>
+        <h1 class="landing-title">五度环</h1>
+        <p class="landing-lead">用听、拼、补、判断，把一本开源乐理教材走成一座城。每一条规则都能当场听见，也能当场判对错。</p>
+      </div>
+
+      <p class="landing-who">你是记谱学徒，在记谱公会当差。名字不写在谱上——城里有五个人各持一套说法，你要把他们的规则写成校记，最后在终页署上自己的名字。</p>
+
+      <div class="landing-goal">
+        <span class="m-label">总目标</span>走完六个城区，集齐六页校记。
+      </div>
+
+      <ul class="landing-actions" id="landingActions">
+        <li><b>拼</b><span>在五度环上挑出音阶要用的七块石，再指出哪块是主音。</span></li>
+        <li><b>补</b><span>给一条固定旋律补上缺掉的第二声部，每放一个音都会响。</span></li>
+        <li><b>平</b><span>给乐句接上下一个和弦，把不协和欠下的账还清。</span></li>
+        <li><b>测</b><span>把一堆音排到最紧，或找出两组音里共有的那几个。</span></li>
+        <li><b>听</b><span>听一段短文，在时间轴上标出它的段落与结构点。</span></li>
+      </ul>
+
+      <div class="landing-sound">
+        <span class="m-label">声音</span>建议戴耳机。页面不会自动发声，第一次点按钮之后浏览器才会解锁音频。
+      </div>
+
+      <div class="landing-cta">
+        <button class="btn btn-ink btn-lg" id="btnStart" type="button">开始旅程</button>
+        <button class="btn" id="btnHelpLanding" type="button">怎么玩</button>
+        <button class="btn btn-quiet" id="btnReset" type="button">重新开始</button>
+        <span class="reset-confirm" id="resetConfirm" hidden>
+          这会清掉所有校记和进度，不能撤销。
+          <button class="btn btn-danger" id="btnResetYes" type="button">确定清除</button>
+          <button class="btn" id="btnResetNo" type="button">取消</button>
+        </span>
+      </div>
+
+      <div class="landing-avatar" id="landingAvatar"></div>
+
+      <div class="landing-districts">
+        <div class="landing-districts-label">六个城区</div>
+        <ul id="landingDistrictList"></ul>
+      </div>
+    </section>
+  </main>
+
+  <main class="board" id="viewMap" hidden>
+    <section class="paper" aria-label="环城地图">
+      <div class="paper-head">
+        <h2>环城</h2>
+        <div class="paper-meta">十二块石 · 六城区</div>
+      </div>
+      <div class="ring-host" id="cityHost"></div>
+      <div class="city-note">相邻两块石相差一个纯五度。城区越往外，常音越弱。</div>
+    </section>
+    <aside class="margin-col">
+      <div class="district-panel" id="districtPanel"></div>
+      <div class="source-note">
+        固定旋律与规则取自 Open Music Theory（CC BY-SA 4.0），谱面自绘。
+        <span>角色与环城为虚构设定。</span>
+      </div>
+    </aside>
+  </main>
+
+  <main class="board" id="viewRoom" hidden>
+    <section class="paper" aria-label="工作页">
+      <div class="paper-head">
+        <h2 id="roomTitle">—</h2>
+        <div class="paper-meta" id="roomMeta">—</div>
+      </div>
+      <div class="room-body" id="roomBody"></div>
+      <div class="controls" id="roomActions"></div>
+    </section>
+    <aside class="margin-col">
+      <div class="bust">
+        <div class="bust-art" id="avatarBust"></div>
+        <div class="bust-side">
+          <div class="bust-name">记谱学徒</div>
+          <p class="avatar-say" id="avatarSay">卡住了就点下面的提示，我按三档给。</p>
+          <button class="btn btn-hint" id="btnHint" type="button">让学徒提示</button>
+        </div>
+      </div>
+      <div class="character">
+        <div class="char-name" id="charName">—</div>
+        <p class="char-line" id="charLine">—</p>
+      </div>
+      <div class="marks">
+        <div class="marks-label">页边标记</div>
+        <ul class="mark-list" id="markList"></ul>
+      </div>
+      <button class="btn btn-teach btn-help" id="btnHelp" type="button">怎么玩</button>
+      <button class="btn btn-teach" id="btnTeach" type="button">这一章的讲解</button>
+      <div class="source-note" id="roomSource">—</div>
+    </aside>
+  </main>
+
+  <div class="veil" id="veil" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="verdictTitle">
+      <div class="sheet-eyebrow" id="verdictEyebrow">校毕</div>
+      <h2 id="verdictTitle">—</h2>
+      <div id="verdictBody"></div>
+      <div class="sheet-actions" id="sheetActions"></div>
+    </div>
+  </div>
+
+  <div class="veil" id="teachVeil" hidden>
+    <div class="sheet sheet-wide" role="dialog" aria-modal="true" aria-labelledby="teachTitle">
+      <div class="sheet-eyebrow" id="teachWho">讲解</div>
+      <h2 id="teachTitle">—</h2>
+      <div id="teachBody"></div>
+      <div class="sheet-actions">
+        <button class="btn btn-ink" id="btnTeachClose" type="button">记下了</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="colophon">
+    <span>取材自 Open Music Theory，CC BY-SA 4.0，本作以相同协议发布。</span>
+    <span>规则出处见讲解卡与《SOURCE_BIBLE》。</span>
+  </footer>
+</div>
+<script src="game.js?v=27"></script>
+</body>
+</html>

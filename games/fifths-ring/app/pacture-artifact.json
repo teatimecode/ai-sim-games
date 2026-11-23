@@ -1,0 +1,9 @@
+{
+  "packageType": "static",
+  "entryFile": "index.html",
+  "spa": false,
+  "lifecycle": {
+    "startupSideEffects": "none",
+    "backgroundJobs": "none"
+  }
+}
