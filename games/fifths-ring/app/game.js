@@ -757,6 +757,210 @@ function playReference(plan) {
   }
 }
 
+
+/* ================= 4e. 对照：先放你写的，再放修好的 ================= */
+
+function playCpOnce(level, slots) {
+  var c = ensureAudio();
+  if (!c) return 0;
+  var sp = level.species;
+  var unit = sp === 1 ? 0.6 : 0.32;
+  var total = sp === 1 ? level.cantus.length : level.cantus.length * 2 - 1;
+  var t0 = c.currentTime + 0.05;
+  for (var j = 0; j < total; j++) {
+    var cf = level.cantus[sp === 1 ? j : Math.floor(j / 2)];
+    if (slots[j] != null) playDyad(cf, slots[j], t0 + j * unit, unit * 0.95);
+    else tone(cf, t0 + j * unit, unit * 0.9, 0.13);
+  }
+  return total * unit * 1000;
+}
+
+/* 播放玩家自己的版本；返回时长毫秒，没东西可放时返回 0 */
+function playOwn(room) {
+  var c = ensureAudio();
+  if (!c) return 0;
+  if (room.kind === 'counterpoint') {
+    var lv = LEVELS[room.cp], cp = cpState(room);
+    return playCpOnce(lv, cp.slots);
+  }
+  if (room.kind === 'rhythm') {
+    var rs = rhythmState(room);
+    var dur = playRhythm(room, rs);
+    return dur * 1000;
+  }
+  if (room.kind === 'harmony') {
+    var h = harmonyState(room);
+    if (!h.chosen || !h.chosen.length) return 0;
+    var t0 = c.currentTime + 0.05, i = 0;
+    for (; i < h.chosen.length; i++) playChord(h.chosen[i].pcs, t0 + i * 0.9, 0.8, 0.09);
+    return i * 900;
+  }
+  return 0;
+}
+
+function firstDiffOf(room) {
+  if (room.kind === 'counterpoint') {
+    var r = judge(LEVELS[room.cp], cpState(room).slots);
+    return r.violations.length ? { slot: r.violations[0].slot, label: '第 ' + (r.violations[0].slot + 1) + ' 音 · ' + r.violations[0].code } : null;
+  }
+  if (room.kind === 'rhythm') {
+    var j = judgeRhythm(room, rhythmState(room).bars);
+    return j.first ? { bar: j.first.bar, label: '第 ' + (j.first.bar + 1) + ' 小节 · ' + j.first.code } : null;
+  }
+  if (room.kind === 'harmony') {
+    var h = harmonyState(room);
+    return h.bad ? { rn: h.bad, label: '和弦 ' + h.bad } : null;
+  }
+  return null;
+}
+
+function playCompare(room) {
+  var plan = referencePlan(room);
+  if (!plan) return;
+  var ms = playOwn(room) || 0;
+  var delay = ms + 480;
+  window.setTimeout(function () { playReference(plan); }, delay);
+}
+
+
+/* ================= 4f. 地图常音 ================= */
+
+var drone = { nodes: null, on: false };
+
+function pendingDistricts(s) {
+  s = s || state;
+  return DISTRICTS.filter(function (d) {
+    return playableRoomsOfDistrict(d.id).length > 0 && !(s.seals && s.seals[d.id]);
+  }).length;
+}
+
+/* 未校完的城区越多，两条同频振荡器的差越大，听起来越"脏" */
+function droneDetuneCents(pending) {
+  return Math.min(16, pending * 2 + 2);
+}
+
+function startDrone() {
+  var c = ensureAudio();
+  if (!c) return false;
+  stopDrone();
+  var pending = pendingDistricts();
+  var g = c.createGain();
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.035, c.currentTime + 0.8);
+  var o1 = c.createOscillator(); o1.type = 'sine'; o1.frequency.value = 110;
+  var o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 110;
+  o2.detune.value = droneDetuneCents(pending);
+  o1.connect(g); o2.connect(g); g.connect(masterGain || c.destination);
+  o1.start(); o2.start();
+  drone = { nodes: { g: g, o1: o1, o2: o2 }, on: true };
+  return true;
+}
+
+function stopDrone() {
+  if (!drone.nodes) { drone.on = false; return; }
+  var c = actx, n = drone.nodes;
+  try {
+    if (c) {
+      n.g.gain.cancelScheduledValues(c.currentTime);
+      n.g.gain.setValueAtTime(Math.max(n.g.gain.value, 0.0001), c.currentTime);
+      n.g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.25);
+      n.o1.stop(c.currentTime + 0.35);
+      n.o2.stop(c.currentTime + 0.35);
+    }
+  } catch (e) { /* 已停止的节点重复 stop 会抛错，忽略 */ }
+  drone = { nodes: null, on: false };
+}
+
+
+/* ================= 4g. 我的校记页 ================= */
+
+/* 纯数据，便于测试；渲染层再拼 SVG */
+function diplomaFacts(s) {
+  s = s || state;
+  var marks = DISTRICTS.map(function (d) {
+    return { id: d.id, name: DISTRICT_MARK[d.id].name, got: !!(s.seals && s.seals[d.id]) };
+  });
+  var records = DISTRICTS.map(function (d) {
+    var r = s.records && s.records[d.id];
+    return { district: d.name, choice: (r && r.choice) ? r.choice : '未记' };
+  });
+  var total = ROOMS.filter(function (r) { return r.kind !== 'locked'; }).length;
+  return {
+    name: s.signed || '（留白）',
+    done: Object.keys(s.cleared || {}).length,
+    total: total,
+    marks: marks,
+    records: records
+  };
+}
+
+function diplomaMarkup() {
+  var facts = diplomaFacts();
+  var av = avatarSVG(avatarOf(), 92).outerHTML;
+  var marks = facts.marks.map(function (m) {
+    var glyph = m.got ? markSVG(m.id, 16).outerHTML : '';
+    return '<span class="d-mark' + (m.got ? ' is-on' : '') + '">' + glyph + '<b>' + m.name + '</b>' + (m.got ? '' : '<i>未获得</i>') + '</span>';
+  }).join('');
+  var records = facts.records.map(function (r) {
+    return '<li>' + r.district + ' · ' + r.choice + '</li>';
+  }).join('');
+  var done = facts.done;
+  var total = facts.total;
+  var name = facts.name;
+  var today = new Date();
+  var date = today.getFullYear() + ' 年 ' + (today.getMonth() + 1) + ' 月 ' + today.getDate() + ' 日';
+
+  return '<div class="diploma-page">' +
+    '<h1>五度环</h1>' +
+    '<div class="d-sub">校记页 · 环城记谱公会</div>' +
+    '<div class="d-head">' + av +
+      '<div><div>本册记谱人</div><div class="d-name">' + name + '</div>' +
+      '<div class="d-sub" style="margin-top:10px">已完成 ' + done + ' / ' + total + ' 页 · ' + date + '</div></div>' +
+    '</div>' +
+    '<div class="d-marks">' + marks + '</div>' +
+    '<div class="d-sub">六区校记</div>' +
+    '<ul>' + records + '</ul>' +
+    '<div class="d-foot">规则与固定旋律取自 Open Music Theory（CC BY-SA 4.0），谱面与环城为原创。<br>声音由浏览器 Web Audio 实时合成，本页不含任何音频文件。</div>' +
+  '</div>';
+}
+
+function renderDiploma() {
+  var host = document.getElementById('diplomaHost');
+  if (host) host.innerHTML = diplomaMarkup();
+}
+
+function printDiploma() {
+  renderDiploma();
+  window.print();
+}
+
+function downloadDiploma() {
+  var html = '<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8">' +
+    '<title>五度环 · 我的校记页</title><style>' +
+    'body{margin:0;background:#fff;color:#211c18;font-family:"Songti SC","Iowan Old Style",Georgia,serif}' +
+    '.diploma-page{width:180mm;min-height:250mm;margin:0 auto;padding:18mm 16mm}' +
+    '.diploma-page h1{font-size:24px;letter-spacing:.2em;margin:0 0 4px;font-weight:600}' +
+    '.d-sub{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.2em;color:#6f6455;margin-bottom:14px}' +
+    '.d-head{display:flex;gap:16px;align-items:flex-start;border-bottom:1px solid #c9b9a4;padding-bottom:12px;margin-bottom:12px}' +
+    '.d-name{font-size:20px;letter-spacing:.2em;border-bottom:1px solid #a3392a;padding-bottom:3px;display:inline-block;margin-top:6px}' +
+    '.d-marks{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0}' +
+    '.d-mark{display:flex;align-items:center;gap:6px;font-size:12px;color:#9a8b78}' +
+    '.d-mark.is-on{color:#a3392a}.d-mark i{font-style:normal;font-size:10px}' +
+    'ul{list-style:none;padding:0;margin:6px 0 0;font-size:12px;line-height:1.9;color:#3b342c}' +
+    '.d-foot{margin-top:18px;padding-top:8px;border-top:1px solid #c9b9a4;font-size:10px;color:#7a6c5c;line-height:1.7}' +
+    '@page{size:A4;margin:0}' +
+    '</style></head><body>' + diplomaMarkup() + '</body></html>';
+  var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '五度环-校记页.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
 function roomHasFailure(room) {
   if (room.kind === 'counterpoint') {
     var c = cpState(room);
@@ -979,6 +1183,7 @@ function buildScore(level, slots) {
     var cls = 'note-head';
     if (opts.empty) cls += ' is-empty';
     if (opts.bad) cls += ' is-bad';
+    if (opts.diff) cls += ' is-diff';
     if (opts.active) cls += ' is-active';
     var head = svgEl('ellipse', {
       cx: x, cy: y, rx: 5.8, ry: 4.1, class: cls,
@@ -1035,6 +1240,7 @@ function buildScore(level, slots) {
       drawNote(x, v, cpClef, cpBottom, {
         empty: false,
         bad: !!marked,
+        diff: !!(state.diff && state.diff.slot === j),
         active: j === state.activeSlot
       });
     }
@@ -1986,8 +2192,9 @@ function renderMap() {
   var totalHost = document.getElementById('sealTotal');
   if (totalHost) totalHost.textContent = String(sealTotal);
 
+  var pendingCount = pendingDistricts();
   var ctext = svgEl('text', { x: 210, y: 204, class: 'city-center' });
-  ctext.textContent = '常音';
+  ctext.textContent = pendingCount ? '常音 · 紧张' : '常音 · 已正';
   svg.appendChild(ctext);
   var csub = svgEl('text', { x: 210, y: 222, class: 'city-center-sub' });
   csub.textContent = state.signed ? '已署名' : '· 仍在响 ·';
@@ -2040,6 +2247,35 @@ function renderMap() {
   });
 
   host.appendChild(svg);
+
+  var audioHost = document.getElementById('cityAudio');
+  if (audioHost) {
+    audioHost.innerHTML = '';
+    var pending2 = pendingDistricts();
+    if (!audioSupported()) {
+      var un = document.createElement('span');
+      un.className = 'city-audio-note';
+      un.textContent = '这个浏览器不支持实时合成，常音只能看文字：' + (pending2 ? '还有 ' + pending2 + ' 区未校。' : '六区都已校完。');
+      audioHost.appendChild(un);
+    } else {
+      var db = document.createElement('button');
+      db.type = 'button';
+      db.className = 'btn btn-quiet btn-mini';
+      db.id = 'droneBtn';
+      db.textContent = drone.on ? '停止常音' : ('听常音 · ' + (pending2 ? pending2 + ' 区未校' : '已正'));
+      db.addEventListener('click', function () {
+        ensureAudio();
+        if (drone.on) stopDrone(); else startDrone();
+        renderMap();
+      });
+      audioHost.appendChild(db);
+      var note = document.createElement('span');
+      note.className = 'city-audio-note';
+      note.textContent = pending2 ? '未校的城区越多，这条音越不干净。' : '六区都校完了，常音已经干净。';
+      audioHost.appendChild(note);
+    }
+  }
+
   renderDistrictPanel();
   saveState();
 }
@@ -2542,7 +2778,8 @@ function renderRhythmRoom(room, body, barUi) {
 
   st.bars.forEach(function (bar, bi) {
     var row = document.createElement('div');
-    row.className = 'rb-row' + (bi === st.active ? ' is-active' : '');
+    row.className = 'rb-row' + (bi === st.active ? ' is-active' : '') +
+      (state.diff && state.diff.bar === bi ? ' is-diff' : '');
 
     var head = document.createElement('div');
     head.className = 'rb-head';
@@ -3060,6 +3297,7 @@ function routeOnBoot(s) {
 }
 
 function renderLanding() {
+  stopDrone();
   state.view = 'landing';
   $('viewLanding').hidden = false;
   $('viewMap').hidden = true;
@@ -3590,6 +3828,7 @@ function openHelp(room) {
 
 function renderRoom() {
   stopFormAnim();
+  stopDrone();
   var room = ROOM_INDEX[state.roomId];
   if (!room) { renderMap(); return; }
   state.view = 'room';
@@ -3620,6 +3859,7 @@ function renderRoom() {
   actions.innerHTML = '';
 
   var p = roomProgress(room);
+  state.diff = roomHasFailure(room) ? firstDiffOf(room) : null;
   body.appendChild(buildMission(room, p));
 
   var work = document.createElement('div');
@@ -3640,7 +3880,7 @@ function renderRoom() {
 
   if (roomHasFailure(room)) {
     var refPlan = referencePlan(room);
-    if (refPlan) bar.compare(mkBtn('听修好的版本', 'btn', function () { playReference(refPlan); }));
+    if (refPlan) bar.compare(mkBtn('先听你写的，再听修好的', 'btn', function () { playCompare(room); }));
   }
 
   bar.finish();
@@ -3650,6 +3890,9 @@ function renderRoom() {
 function renderMarkList(items, emptyText) {
   var list = $('markList');
   list.innerHTML = '';
+  if (state.diff && items && items.length && !(items.length === 1 && items[0].label === '第一处不同')) {
+    items = [{ label: '第一处不同', message: state.diff.label }].concat(items);
+  }
   if (!items.length) {
     var li = document.createElement('li');
     li.className = 'is-good';
@@ -4029,7 +4272,7 @@ function scaleSubmit(room) {
 /* ---------- 和声 ---------- */
 
 function harmonyState(room) {
-  if (!state.harmony[room.id]) state.harmony[room.id] = { step: 0, attempts: 0, bad: null, lastError: null };
+  if (!state.harmony[room.id]) state.harmony[room.id] = { step: 0, attempts: 0, bad: null, lastError: null, chosen: [] };
   return state.harmony[room.id];
 }
 
@@ -4063,7 +4306,8 @@ function renderHarmonyRoom(room, body, barUi) {
   sit.options.forEach(function (o) {
     var b = document.createElement('button');
     b.type = 'button';
-    b.className = 'chord-opt' + (h.bad === o.rn ? ' is-bad' : '');
+    b.className = 'chord-opt' + (h.bad === o.rn ? ' is-bad' : '') +
+      (state.diff && state.diff.rn === o.rn ? ' is-diff' : '');
     var rn = document.createElement('span');
     rn.className = 'rn';
     rn.textContent = o.rn;
@@ -4105,6 +4349,8 @@ function harmonyChoose(room, opt) {
 
   if (errs.length) {
     h.bad = opt.rn;
+    h.chosen = h.chosen || [];
+    h.chosen.push({ rn: opt.rn, pcs: opt.pcs });
     h.lastError = errs;
     renderRoom();
     saveState();
@@ -4952,6 +5198,8 @@ function showEnding() {
     body.appendChild(list2);
     var actions0 = $('sheetActions');
     actions0.innerHTML = '';
+    actions0.appendChild(mkBtn('打印 / 存为 PDF', 'btn', printDiploma));
+    actions0.appendChild(mkBtn('下载校记页', 'btn btn-quiet', downloadDiploma));
     actions0.appendChild(mkBtn('回环城', 'btn btn-ink', function () {
       hideVerdict();
       state.roomId = null;
@@ -5022,6 +5270,7 @@ function showEnding() {
     saveState();
     showEnding();
   }));
+  actions.appendChild(mkBtn('下载校记页', 'btn btn-quiet', downloadDiploma));
 }
 
 /* ================= 18. 启动 ================= */
@@ -5058,7 +5307,10 @@ function bindGlobal() {
   if (warmSkip) warmSkip.addEventListener('click', closeWarmup);
   var audioClose = $('audioClose');
   if (audioClose) audioClose.addEventListener('click', function () { $('audioVeil').hidden = true; });
-  document.addEventListener('visibilitychange', function () { audioCtl.refresh(); });
+  document.addEventListener('visibilitychange', function () {
+    audioCtl.refresh();
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') stopDrone();
+  });
   window.addEventListener('pageshow', function () { audioCtl.refresh(); });
   $('btnHint').addEventListener('click', function () {
     var room = ROOM_INDEX[state.roomId];
@@ -5136,6 +5388,9 @@ if (typeof module !== 'undefined' && module.exports) {
     barTicks: barTicks, endingEligible: endingEligible, TICK_LABEL: TICK_LABEL,
     createAudioController: createAudioController, audioDiagText: audioDiagText,
     referencePlan: referencePlan, playReference: playReference, roomHasFailure: roomHasFailure,
+    firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
+    pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
+    diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,
     compassDistance: compassDistance, compassNeighbors: compassNeighbors, compassKeyOf: compassKeyOf,
     AVATAR_DEFAULT: AVATAR_DEFAULT
   };

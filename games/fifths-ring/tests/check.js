@@ -508,10 +508,43 @@ rhythmRooms2.forEach((r) => {
 ok('warmup overlay exists', html.indexOf('id="warmupVeil"') !== -1);
 ok('warmup can be skipped', html.indexOf('id="warmupSkip"') !== -1);
 ok('warmup shows once then persists', src.indexOf('warmupDone') !== -1 && src.indexOf('if (!state.warmupDone) openWarmup();') !== -1);
-ok('compare button only after a failure', src.indexOf('if (roomHasFailure(room))') !== -1 && src.indexOf("bar.compare(mkBtn('听修好的版本'") !== -1);
+ok('compare button only after a failure', src.indexOf('if (roomHasFailure(room))') !== -1 && src.indexOf("bar.compare(mkBtn('先听你写的，再听修好的'") !== -1);
 ok('touch targets are at least 44px',
   css.indexOf('.btn{min-height:44px}') !== -1 && css.indexOf('.pitch{min-height:44px}') !== -1 &&
   css.indexOf('.rp-tile{min-height:44px') !== -1 && css.indexOf('.swatch{min-height:44px') !== -1);
+
+/* ---------- 19. A/B/C 增强 ---------- */
+const cpRoom = rooms.find((r) => r.kind === 'counterpoint');
+const rhythmRoom = rooms.find((r) => r.kind === 'rhythm');
+const harmonyRoom = rooms.find((r) => r.kind === 'harmony');
+
+const scaleRoom = rooms.find((r) => r.kind === 'scale');
+ok('A: untouched rooms have no first difference', m.firstDiffOf(scaleRoom) === null);
+ok('A: own playback exists for compare', typeof m.playOwn === 'function' && typeof m.playCompare === 'function');
+ok('A: compare label separates the two listens', src.indexOf('先听你写的，再听修好的') !== -1);
+ok('A: difference is marked on the score', src.indexOf("if (opts.diff) cls += ' is-diff'") !== -1);
+ok('A: difference is marked on the bar', src.indexOf("state.diff.bar === bi ? ' is-diff'") !== -1);
+ok('A: difference is marked on the chord', src.indexOf("state.diff.rn === o.rn ? ' is-diff'") !== -1);
+ok('A: reference playback is reused, not duplicated',
+  (src.match(/function playReference\(/g) || []).length === 1);
+
+ok('B: detune grows with pending districts', m.droneDetuneCents(0) < m.droneDetuneCents(3));
+ok('B: detune is capped', m.droneDetuneCents(99) <= 16);
+ok('B: pending districts counts unsealed ones', m.pendingDistricts({ seals: {} }) === 6);
+ok('B: sealed districts are excluded', m.pendingDistricts({ seals: { quarry: true } }) === 5);
+ok('B: drone stops when leaving the map', src.indexOf("function renderRoom() {\n  stopFormAnim();\n  stopDrone();") !== -1);
+ok('B: drone stops when the page is hidden', src.indexOf("document.visibilityState === 'hidden') stopDrone()") !== -1);
+ok('B: drone reuses the single audio gate', src.indexOf('var c = ensureAudio();\n  if (!c) return false;\n  stopDrone();') !== -1);
+ok('B: unsupported audio still shows text', src.indexOf('这个浏览器不支持实时合成') !== -1);
+
+ok('C: diploma facts carry six marks', m.diplomaFacts({ signed: '甲', seals: {}, cleared: {}, records: {} }).marks.length === 6);
+ok('C: diploma facts carry six records', m.diplomaFacts({}).records.length === 6);
+ok('C: blank signature stays blank', m.diplomaFacts({}).name === '（留白）');
+ok('C: signed name is used', m.diplomaFacts({ signed: '甲' }).name === '甲');
+ok('C: diploma has a print entry', src.indexOf('function printDiploma') !== -1);
+ok('C: diploma can be downloaded', src.indexOf('function downloadDiploma') !== -1);
+ok('C: diploma sends nothing to a server', src.indexOf('fetch(') === -1 && src.indexOf('XMLHttpRequest') === -1);
+ok('C: print hides the app shell', css.indexOf('.desk{display:none !important}') !== -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {

@@ -626,3 +626,33 @@ body{
 .swatch{min-height:44px;min-width:44px}
 .audio-chip{min-height:44px;padding-top:8px;padding-bottom:8px}
 .rb-track{height:44px}
+
+/* ================= 常音与首差 ================= */
+.city-audio{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;margin:2px 0 10px}
+.city-audio-note{font-size:11.5px;color:var(--ink-soft)}
+.note-head.is-diff{stroke:var(--ochre);stroke-width:3.4}
+.rb-row.is-diff{border-color:var(--ochre);box-shadow:inset 0 0 0 2px rgba(163,57,42,.28)}
+.chord-opt.is-diff{border-width:2px;border-color:var(--ochre)}
+
+/* ================= 校记页 ================= */
+.diploma{display:none}
+.diploma-page{
+  width:180mm;min-height:250mm;margin:0 auto;padding:18mm 16mm;
+  background:#fff;color:#211c18;font-family:"Songti SC","Iowan Old Style",Georgia,serif;
+}
+.diploma-page h1{font-size:24px;letter-spacing:.2em;margin:0 0 4px;font-weight:600}
+.diploma-page .d-sub{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.2em;color:#6f6455;margin-bottom:14px}
+.diploma-page .d-head{display:flex;gap:16px;align-items:flex-start;border-bottom:1px solid #c9b9a4;padding-bottom:12px;margin-bottom:12px}
+.diploma-page .d-name{font-size:20px;letter-spacing:.2em;border-bottom:1px solid #a3392a;padding-bottom:3px;display:inline-block;margin-top:6px}
+.diploma-page .d-marks{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0}
+.diploma-page .d-mark{display:flex;align-items:center;gap:6px;font-size:12px;color:#9a8b78}
+.diploma-page .d-mark.is-on{color:#a3392a}
+.diploma-page .d-mark i{font-style:normal;font-size:10px}
+.diploma-page ul{list-style:none;padding:0;margin:6px 0 0;font-size:12px;line-height:1.9;color:#3b342c}
+.diploma-page .d-foot{margin-top:18px;padding-top:8px;border-top:1px solid #c9b9a4;font-size:10px;color:#7a6c5c;line-height:1.7}
+@media print{
+  .desk{display:none !important}
+  .diploma{display:block !important}
+  .diploma-page{margin:0;box-shadow:none}
+  @page{size:A4;margin:0}
+}
