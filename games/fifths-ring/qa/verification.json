@@ -826,5 +826,35 @@
       "校记卡在真机上下载后打开的效果未看",
       "白话解释是否真的降低理解成本未做真人对照"
     ]
+  },
+  "acceptanceEvidence2026_11_23": {
+    "scope": "按用户要求关闭证据缺口，不扩充房间与知识",
+    "inventory": {
+      "total": 27,
+      "playable": 19,
+      "lectureOnly": 8,
+      "source": "app/game.js ROOMS",
+      "conflictResolution": "15 为早期任务卡口径、24 为加节奏桥前旧数，均已在 design/ROOM_INVENTORY.md 标注为历史"
+    },
+    "A_confirmed": [
+      "r-c-major：清空存档后从地图点进，故意选错七块石→提交→读到「这七块石不对，本关应当是 C D E F G A B」→点选正确七块并定主音→提交→cleared=true，掌握=熟练",
+      "r-g-major：错误提交→「本关应当是 G A B C D E F♯」→改正→cleared=true，掌握=熟练",
+      "r-d-dorian：修正驱动脚本后按 target.tonic 定主音→cleared=true，掌握=熟练",
+      "r-cp1：满格错音提交→读到「你刚把这一列的对位音逐格填满了，断在上一个音和它之间：FS-CAD」→第二次提交后点「看乐长的示范」→提交→cleared=true，掌握=理解（用了提示）",
+      "房间口径：27/19/8 与代码一致，15 与 24 已在清单文档中标为历史"
+    ],
+    "B_pipelineOnly": [
+      "其余 15 间可玩房：本轮只验证到打开与渲染，未用真实点击完成闭环；cleared 由上一轮 passRoom 管线回归覆盖（19/19）",
+      "巡演与掌握度：入口、三关生成、退出恢复、状态转换已在上一轮浏览器验证；本轮未重复",
+      "存档恢复：往轮已验证；本轮未重跑"
+    ],
+    "C_unverified": [
+      "15 间可玩房的真实点击闭环",
+      "360/390/412 真实移动宽度触控（本轮仅有 768/1024/1280 桌面视口）",
+      "人耳听检（对位/和声/节奏/曲式/常音）——本轮没有真人听辨，未做任何听感结论",
+      "校记卡下载文件在磁盘上重新打开（只验证了生成与下载调用不报错）"
+    ],
+    "methodDisclosure": "浏览器内用 dispatchEvent 派发 click 到真实控件，走真实事件处理器与判定；不是指针输入，也不是直接调用 passRoom 或写 localStorage",
+    "testRun": "node tests/check.js → 661 passed / 0 failed"
   }
 }
