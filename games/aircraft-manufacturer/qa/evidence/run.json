@@ -1,62 +1,62 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "c5b90e8b74318921",
+  "buildHash": "30ac4437b22a0a14",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
-  "startedAt": "2026-11-18T02:30:00Z",
+  "startedAt": "2026-11-23T05:50:00Z",
   "inputTrace": [
     {
       "step": 1,
       "action": "open",
       "target": "/",
-      "note": "干净加载，序章第 1 屏"
+      "note": "干净加载，序章第 1 屏（含厂区插图）"
     },
     {
       "step": 2,
       "action": "click",
-      "target": "#proNext ×6",
-      "note": "序章：公司/上一款机型/行业位置/前任/董事会/五个部门"
+      "target": "#proNext ×8",
+      "note": "序章 8 屏：4 屏带线稿插图"
     },
     {
       "step": 3,
       "action": "click",
-      "target": "[data-pick=\"seat\"][data-val=\"main\"]",
-      "note": "立项：选 130 座主流市场"
+      "target": "[data-pick] ×2",
+      "note": "立项：130 座 + 全新设计"
     },
     {
       "step": 4,
       "action": "click",
-      "target": "[data-pick=\"route\"][data-val=\"clean\"]",
-      "note": "立项：选全新设计"
+      "target": "#obNext ×3 + [data-fin=\"gov\"]",
+      "note": "规则三页 + 融资"
     },
     {
       "step": 5,
       "action": "click",
-      "target": "#obNext ×3 + [data-fin=\"gov\"]",
-      "note": "规则三页 + 融资方案"
+      "target": "[data-run=\"all\"]",
+      "note": "引导模式一键执行建议"
     },
     {
       "step": 6,
       "action": "click",
-      "target": "[data-run=\"all\"]",
-      "note": "引导模式一键执行建议动作"
+      "target": "[data-tut=\"off\"] 可选",
+      "note": "新手目标条可关闭"
     },
     {
       "step": 7,
       "action": "click",
       "target": "[data-dept]/[data-work]",
-      "note": "手动调整部门产能"
+      "note": "部门的产能分配"
     },
     {
       "step": 8,
       "action": "click",
       "target": "[data-story=\"a\"] / .modal [data-close]",
-      "note": "9 个情节节拍：6 段叙事 + 3 次抉择"
+      "note": "9 个情节节拍，叙事页带插图"
     },
     {
       "step": 9,
       "action": "click",
-      "target": "[data-buy]/[data-act=\"expand\"]/[data-hire]",
+      "target": "[data-buy]/[data-act]/[data-hire]",
       "note": "采购、扩线、增聘"
     },
     {
@@ -80,8 +80,8 @@
     {
       "step": 13,
       "action": "click",
-      "target": "[data-open=\"codex\"] → [data-codex=\"ironbird\"]",
-      "note": "打开工程图鉴"
+      "target": "[data-open=\"codex\"] → [data-codex=\"jig\"]",
+      "note": "工程图鉴"
     }
   ],
   "observations": {
@@ -94,8 +94,10 @@
         "title": "适航 · 北辰航空 P-19 项目",
         "consoleErrors": 0,
         "prologueScreens": 8,
+        "prologueArt": 4,
         "turn": 1,
-        "cash": 2.0
+        "cash": 2.0,
+        "photoFallback": true
       }
     },
     "render": {
@@ -107,10 +109,12 @@
       "state": {
         "visual": "qa/evidence/01-tech.png",
         "extraVisuals": [
-          "qa/evidence/02-beat.png",
-          "qa/evidence/03-tc.png",
-          "qa/evidence/04-ending.png",
-          "qa/evidence/06-codex.png"
+          "qa/evidence/11-ui-1280x720.png",
+          "qa/evidence/12-ui-900.png",
+          "qa/evidence/13-ui-430.png",
+          "qa/evidence/14-customer.png",
+          "qa/evidence/15-rocket.png",
+          "qa/evidence/04-ending.png"
         ],
         "fiveGatesVisible": true,
         "fiveDeptsVisible": true,
@@ -118,22 +122,31 @@
         "canvasNonEmpty": true,
         "codexItems": 15,
         "criticalPathChips": 4,
-        "guideOn": true
+        "guideOn": true,
+        "tutorialBar": true,
+        "photoLayer": "assets/prologue-*.jpg 优先，缺失回退线稿",
+        "widthsChecked": [
+          1440,
+          1280,
+          900,
+          430
+        ],
+        "guideOverlap": false
       }
     },
     "input": {
-      "id": "input-guided-and-assign",
+      "id": "input-new-systems",
       "inputs": [
-        "click [data-run=\"all\"]",
-        "click [data-dept=\"design\"]",
-        "click [data-work=\"d3\"]"
+        "click [data-tab=\"cust\"]",
+        "click [data-visit=\"高原航空\"]",
+        "click [data-audio=\"toggle\"]",
+        "click #rocket → [data-route=\"reusable\"]"
       ],
       "state": {
-        "guidedSuggestionsApplied": 1,
-        "pendingAssign": {
-          "d3": 2
-        },
-        "reRenderedAfterEachClick": true
+        "customerTab": true,
+        "visitAction": true,
+        "audioToggle": true,
+        "rocketSlice": true
       }
     },
     "coreLoop": {
@@ -167,7 +180,7 @@
           7
         ],
         "eventsSeen": "按种子抽 4–5 张，含竞品降价/局方加试/客户改窗口等",
-        "cash": 5.82,
+        "cash": 5.65,
         "seed": 14508,
         "storyNodes": 3,
         "seat": "main",
@@ -175,7 +188,9 @@
         "rdPerTurn": 0.7,
         "storyBeats": 9,
         "storyChoices": 3,
-        "eventsPerRun": "4-5"
+        "eventsPerRun": "4-5",
+        "tutorialTurns": "1-4",
+        "echoes": 3
       }
     },
     "outcome": {
@@ -188,7 +203,7 @@
         "ending": "win",
         "title": "通关 · 续任",
         "delivered": 31,
-        "cash": 5.82,
+        "cash": 5.65,
         "visual": "qa/evidence/04-ending.png"
       }
     },

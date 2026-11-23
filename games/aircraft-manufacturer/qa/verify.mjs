@@ -149,6 +149,45 @@ E.setFinance(probe2, 'gov');
 const f1 = E.forecast(probe2, 12);
 assert(f1.tc && f1.tc < 15, '加人后预测应给出更早的 TC，实际 ' + f1.tc);
 
+/* --- 叙事回响 --- */
+assert(E.BEATS.filter((b) => b.when).length >= 2, '应有条件型回响节拍');
+const echoProbe = E.newGame({ seed: 20260419 });
+const echoLock = E.BEATS.filter((b) => b.id === 'echo-lock')[0];
+assert(echoLock.when(echoProbe) === false, '未做选择时回响节拍不应出现');
+echoProbe.echoFlags['dinner:a'] = true;
+assert(echoLock.when(echoProbe) === true, '做了选择后回响节拍应出现');
+assert(main.echoes.length === 3, '三个抉择应各留一条回响，实际 ' + main.echoes.length);
+
+/* --- 航司侧 --- */
+const air = E.newGame({ seed: 20260419 });
+assert(Object.keys(air.airlines).length === 4, '应有四个航司档案');
+const baseRel = air.airlines['高原航空'].rel;
+E.setFinance(air, 'gov');
+assert(E.visitAirline(air, '高原航空').ok, '拜访应成功');
+E.commit(air);
+assert(air.airlines['高原航空'].rel === baseRel + 8, '拜访应 +8 关系，实际 ' + air.airlines['高原航空'].rel);
+const v2 = E.newGame({ seed: 20260419 });
+E.setFinance(v2, 'gov');
+v2.offers.filter((o) => o.id === 'alt')[0].open = true;
+v2.airlines['高原航空'].rel = 90;
+E.decideOffer(v2, 'alt', true);
+E.commit(v2);
+const discHigh = v2.slots[0].disc;
+const v3 = E.newGame({ seed: 20260419 });
+E.setFinance(v3, 'gov');
+v3.offers.filter((o) => o.id === 'alt')[0].open = true;
+E.decideOffer(v3, 'alt', true);
+E.commit(v3);
+assert(discHigh < v3.slots[0].disc, '关系好应拿到更浅的折扣');
+
+/* --- 航天切片 --- */
+const re = E.rocketCalc('reusable');
+const ex = E.rocketCalc('expendable');
+assert(re && ex && re.flown === 12 && ex.flown === 12, '两条路线应交付同样 12 发');
+assert(re.cash > ex.cash, '可复用最终应更赚钱');
+assert(re.minCash < ex.minCash, '可复用中途现金应更紧');
+assert(Math.abs(E.rocketBreakEven() - 6.25) < 0.05, '回本点应约 6.25 发');
+
 /* --- 重开 --- */
 const fresh = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
 assert(fresh.turn === 1 && fresh.cash === C.startCash && fresh.delivered === 0 && fresh.tc === null && fresh.pc === null,
@@ -179,7 +218,7 @@ if (!existsSync(evidencePath)) {
   if (obs.restart && obs.restart.state) {
     assert(obs.restart.state.turn === 1 && obs.restart.state.delivered === 0, '实机重开未回到初态');
   }
-  ['01-tech', '02-beat', '03-tc', '04-ending', '05-restart', '06-codex'].forEach((n) => {
+  ['01-tech', '04-ending', '05-restart', '11-ui-1280x720', '12-ui-900', '13-ui-430', '14-customer', '15-rocket'].forEach((n) => {
     const p = resolve(ROOT, 'qa/evidence/' + n + '.png');
     assert(existsSync(p) && statSync(p).size > 10000, '缺少实机截图 ' + n + '.png');
   });

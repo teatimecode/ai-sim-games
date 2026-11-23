@@ -9,6 +9,45 @@
   let S = E.newGame();
   let tab = 'tech';
   let guided = true;
+
+  /* ---------------- 音效：WebAudio 合成，无外部文件 ---------------- */
+  const AUD = { ctx: null, muted: false, vol: 0.5, failed: false };
+  function audioCtx() {
+    if (AUD.ctx || AUD.failed) return AUD.ctx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { AUD.failed = true; return null; }
+      AUD.ctx = new AC();
+    } catch (e) { AUD.failed = true; }
+    return AUD.ctx;
+  }
+  function tone(freq, dur, type, gain, delay) {
+    const ctx = audioCtx();
+    if (!ctx) return;
+    try {
+      if (ctx.state === 'suspended') ctx.resume();
+      const t0 = ctx.currentTime + (delay || 0);
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, (gain || 0.06) * AUD.vol), t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch (e) { /* 静默降级 */ }
+  }
+  function sfx(kind) {
+    if (AUD.muted) return;
+    if (kind === 'click') tone(760, 0.05, 'sine', 0.04);
+    else if (kind === 'tab') tone(520, 0.05, 'triangle', 0.045);
+    else if (kind === 'ok') { tone(660, 0.09, 'sine', 0.05); tone(990, 0.12, 'sine', 0.04, 0.09); }
+    else if (kind === 'warn') tone(200, 0.16, 'square', 0.035);
+    else if (kind === 'deliver') { tone(523, 0.09, 'sine', 0.05); tone(659, 0.09, 'sine', 0.05, 0.09); tone(784, 0.16, 'sine', 0.05, 0.18); }
+    else if (kind === 'alarm') { tone(140, 0.18, 'sawtooth', 0.04); tone(120, 0.2, 'sawtooth', 0.035, 0.2); }
+  }
+  if (S && S.tutOn === undefined) S.tutOn = true;
   let dept = 'design';
   let seen = {};
 
@@ -53,10 +92,6 @@
   }
   function closeModal() {
     $('#mask').classList.add('hidden'); $('#mask').innerHTML = '';
-    if (S.story && S.story.type !== 'note' && !S.pending.story && !S.ending && storyShown !== S.turn) {
-      storyShown = S.turn;
-      showStory();
-    }
   }
   function modalOpen() { return !$('#mask').classList.contains('hidden'); }
 
@@ -86,22 +121,188 @@
           <p>两个选项的差别不在金额，在<b>你欠谁</b>：政府基金给得多，但绑了 25 架的交付承诺。</p>`
     }
   ];
+
+  /* ---------------- 序章插图（同一套线稿语言） ---------------- */
+  const ART_INK = 'fill="none" stroke="#16222B" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"';
+  const ART_HATCH = 'fill="none" stroke="#16222B" stroke-width=".7" stroke-opacity=".28"';
+  const ART_TEAL = 'fill="none" stroke="#1E6F78" stroke-width="1.2"';
+  const ART_AMBER = 'fill="none" stroke="#B0701C" stroke-width="1.2"';
+
+  // 照片放在 assets/ 下，存在则优先使用；缺失时自动回退到线稿
+  const PHOTO_SRC = {
+    yard: 'assets/prologue-yard.jpg',
+    shop: 'assets/prologue-shop.jpg',
+    desk: 'assets/prologue-notebook.jpg',
+    board: 'assets/prologue-board.jpg',
+    runway: 'assets/prologue-runway.jpg'
+  };
+  function artBlock(key) {
+    const svg = PROLOGUE_ART[key] || '';
+    const src = PHOTO_SRC[key];
+    if (!src) return '<div class="proart">' + svg + '</div>';
+    return '<div class="proart">' +
+      '<img class="artimg" src="' + src + '" alt="" onerror="this.parentNode.classList.add(\'noimg\');this.remove()">' +
+      '<div class="artfallback">' + svg + '</div>' +
+      '</div>';
+  }
+
+  function artWrap(inner, vb) {
+    return '<svg viewBox="' + (vb || '0 0 1000 360') + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block">' + inner + '</svg>';
+  }
+
+  const PROLOGUE_ART = {
+    yard: artWrap(
+      '<defs>' +
+      '<linearGradient id="gSkyY" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F3EEE2"/><stop offset="1" stop-color="#E3DBC9"/></linearGradient>' +
+      '<linearGradient id="gGndY" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9D2C0"/><stop offset="1" stop-color="#C9C1AC"/></linearGradient>' +
+      '<radialGradient id="gDoorY" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#F0D9A8" stop-opacity=".85"/><stop offset="1" stop-color="#F0D9A8" stop-opacity="0"/></radialGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gSkyY)"/>' +
+      '<rect x="0" y="200" width="1000" height="30" fill="#F5F1E6" opacity=".65"/>' +
+      '<rect x="0" y="214" width="1000" height="146" fill="url(#gGndY)"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".35"><path d="M0 244 L1000 244"/><path d="M0 262 L1000 262"/><path d="M0 286 L1000 286"/><path d="M0 316 L1000 316"/></g>' +
+      '<ellipse cx="196" cy="216" rx="150" ry="9" fill="#9C9482" opacity=".33"/>' +
+      '<ellipse cx="425" cy="217" rx="120" ry="8" fill="#9C9482" opacity=".3"/>' +
+      '<rect x="92" y="142" width="208" height="72" fill="#E7E0CE" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M92 142 L196 110 L300 142" fill="#DED6C3" stroke="#16222B" stroke-width="1.2"/>' +
+      '<rect x="120" y="168" width="48" height="46" fill="#F2E6C8" stroke="#16222B" stroke-width="1"/>' +
+      '<ellipse cx="144" cy="191" rx="30" ry="26" fill="url(#gDoorY)"/>' +
+      '<rect x="196" y="168" width="48" height="46" fill="#CFC7B4" stroke="#16222B" stroke-width="1"/>' +
+      '<g stroke="#8D887C" stroke-width=".7" opacity=".5"><path d="M200 178 L240 178"/><path d="M200 190 L240 190"/><path d="M200 202 L240 202"/></g>' +
+      '<rect x="330" y="158" width="190" height="56" fill="#E4DCCA" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M330 158 L425 130 L520 158" fill="#D8D0BC" stroke="#16222B" stroke-width="1.2"/>' +
+      '<rect x="370" y="178" width="58" height="36" fill="#CDC5B1" stroke="#16222B" stroke-width="1"/>' +
+      '<rect x="470" y="188" width="30" height="26" fill="#F2E6C8" stroke="#16222B" stroke-width="1"/>' +
+      '<rect x="560" y="116" width="24" height="98" fill="#DDD5C2" stroke="#16222B" stroke-width="1.2"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".55"><path d="M560 132 L584 132"/><path d="M560 150 L584 150"/><path d="M560 168 L584 168"/></g>' +
+      '<path d="M700 214 L700 70" stroke="#16222B" stroke-width="2.2"/>' +
+      '<path d="M596 88 L706 62 L762 88" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<path d="M762 88 L762 130" stroke="#B0701C" stroke-width="1.4"/>' +
+      '<path d="M706 62 L706 100" stroke="#1E6F78" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width=".9" opacity=".45"><path d="M790 214 L790 190 L832 190 L832 214"/><path d="M850 214 L850 176 L886 176 L886 214"/><path d="M902 214 L902 196 L952 196 L952 214"/></g>' +
+      '<g stroke="#FFFFFF" stroke-width="2" opacity=".5"><path d="M0 226 L1000 226"/><path d="M120 250 L420 250"/><path d="M600 274 L900 274"/></g>' +
+      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">EARLY MORNING · RIVERSIDE WORKS</text>', '0 26 1000 322'),
+
+    shop: artWrap(
+      '<defs>' +
+      '<linearGradient id="gHallS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCD5C4"/><stop offset="1" stop-color="#CFC8B7"/></linearGradient>' +
+      '<linearGradient id="gBarrelS" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9E2D0"/><stop offset=".45" stop-color="#F6F1E4"/><stop offset="1" stop-color="#CFC7B3"/></linearGradient>' +
+      '<linearGradient id="gLampS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2DFB2" stop-opacity=".55"/><stop offset="1" stop-color="#F2DFB2" stop-opacity="0"/></linearGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gHallS)"/>' +
+      '<path d="M470 60 L470 300 L560 300 L560 60 Z" fill="url(#gLampS)"/>' +
+      '<path d="M150 60 L150 300 L230 300 L230 60 Z" fill="url(#gLampS)"/>' +
+      '<g stroke="#8D887C" stroke-width=".9" opacity=".55"><path d="M0 58 L1000 58"/><path d="M0 96 L1000 96"/><path d="M60 58 L100 96 L140 58 L180 96 L220 58 L260 96 L300 58 L340 96 L380 58 L420 96"/><path d="M460 58 L500 96 L540 58 L580 96 L620 58 L660 96 L700 58 L740 96 L780 58 L820 96 L860 58 L900 96 L940 58"/></g>' +
+      '<path d="M120 62 L120 132 L860 132 L860 62" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<rect x="466" y="132" width="54" height="26" fill="#D8D0BD" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M493 158 L493 198" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M462 198 L524 198" stroke="#16222B" stroke-width="2"/>' +
+      '<ellipse cx="430" cy="302" rx="130" ry="12" fill="#9C9482" opacity=".3"/>' +
+      '<path d="M180 300 L180 208 L360 208 L360 300" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<path d="M620 300 L620 208 L800 208 L800 300" stroke="#16222B" stroke-width="1.6" fill="none"/>' +
+      '<path d="M360 232 L620 232" stroke="#8D887C" stroke-width="1" opacity=".6"/>' +
+      '<path d="M360 268 L620 268" stroke="#8D887C" stroke-width="1" opacity=".6"/>' +
+      '<ellipse cx="470" cy="246" rx="46" ry="58" fill="url(#gBarrelS)" stroke="#16222B" stroke-width="1.6"/>' +
+      '<path d="M516 202 L604 210 L604 282 L516 290" fill="#EDE6D4" stroke="#16222B" stroke-width="1.4"/>' +
+      '<ellipse cx="604" cy="246" rx="24" ry="36" fill="#DCD4C1" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width=".7" opacity=".75"><path d="M470 190 L470 302"/><path d="M496 196 L496 296"/><path d="M530 200 L530 292"/><path d="M560 204 L560 288"/><path d="M590 208 L590 284"/></g>' +
+      '<g stroke="#8D887C" stroke-width=".55" opacity=".55"><path d="M452 200 L452 292"/><path d="M440 204 L440 288"/><path d="M428 208 L428 284"/></g>' +
+      '<ellipse cx="300" cy="292" rx="16" ry="4" fill="#9C9482" opacity=".45"/>' +
+      '<ellipse cx="676" cy="294" rx="14" ry="4" fill="#9C9482" opacity=".45"/>' +
+      '<g fill="#16222B" fill-opacity=".62"><circle cx="300" cy="262" r="7"/><path d="M292 270 h16 v24 h-16 z"/><circle cx="676" cy="266" r="7"/><path d="M668 274 h16 v22 h-16 z"/><circle cx="714" cy="272" r="6"/><path d="M707 279 h14 v19 h-14 z"/></g>' +
+      '<path d="M0 300 L1000 300" stroke="#16222B" stroke-width="1.6"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".4"><path d="M0 318 L1000 318"/><path d="M60 334 L240 334"/><path d="M700 334 L880 334"/></g>' +
+      '<text x="40" y="350" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BAY 01 · FUSELAGE SECTION ON JIG</text>', '0 30 1000 330'),
+
+    desk: artWrap(
+      '<defs>' +
+      '<linearGradient id="gDeskD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DCD3BF"/><stop offset="1" stop-color="#C8BFA9"/></linearGradient>' +
+      '<radialGradient id="gLampD" cx="0.18" cy="0.25" r="0.85"><stop offset="0" stop-color="#FBF0D4" stop-opacity=".9"/><stop offset="1" stop-color="#FBF0D4" stop-opacity="0"/></radialGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gDeskD)"/>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gLampD)"/>' +
+      '<path d="M0 236 L1000 236" stroke="#A89E88" stroke-width="1.4"/>' +
+      '<path d="M60 236 L60 340 L940 340 L940 236" fill="#BFB5A0" stroke="#8D887C" stroke-width="1"/>' +
+      '<rect x="180" y="150" width="420" height="196" fill="#F7F2E4" stroke="#16222B" stroke-width="1.6"/>' +
+      '<path d="M180 150 L560 150 L610 176 L230 176 Z" fill="#EFE7D4" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M560 150 L610 176 L610 300 L560 346 Z" fill="#E7DECB" stroke="#16222B" stroke-width="1"/>' +
+      '<g stroke="#B0701C" stroke-width=".8" opacity=".55">' +
+      '<path d="M210 196 L520 196"/><path d="M210 210 L470 210"/><path d="M210 224 L540 224"/><path d="M210 238 L430 238"/><path d="M210 252 L500 252"/>' +
+      '<path d="M210 274 L380 274"/><path d="M210 288 L520 288"/><path d="M210 302 L450 302"/>' +
+      '</g>' +
+      '<g stroke="#16222B" stroke-width=".9" opacity=".45"><path d="M232 262 L420 262 L420 316 L232 316 Z"/><path d="M310 262 L310 316"/></g>' +
+      '<path d="M660 240 L900 240 L900 254 L660 254 Z" fill="#E2D8C2" stroke="#16222B" stroke-width="1.2"/>' +
+      '<g stroke="#16222B" stroke-width=".7" opacity=".5"><path d="M680 244 L680 250"/><path d="M700 244 L700 250"/><path d="M720 244 L720 250"/><path d="M740 244 L740 250"/><path d="M760 244 L760 250"/><path d="M780 244 L780 250"/></g>' +
+      '<path d="M652 300 L870 300 L878 312 L660 312 Z" fill="#D8CEB8" stroke="#16222B" stroke-width="1"/>' +
+      '<ellipse cx="404" cy="352" rx="220" ry="7" fill="#9C9482" opacity=".28"/>' +
+      '<text x="40" y="60" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">DESK DRAWER · OLD NOTEBOOK</text>', '0 30 1000 330'),
+
+    board: artWrap(
+      '<defs>' +
+      '<linearGradient id="gRoomB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EFE9DB"/><stop offset="1" stop-color="#DCD5C4"/></linearGradient>' +
+      '<linearGradient id="gWinB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F8F5EC"/><stop offset="1" stop-color="#E4DED0"/></linearGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gRoomB)"/>' +
+      '<rect x="636" y="80" width="248" height="120" fill="url(#gWinB)" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width="1" opacity=".7"><path d="M760 80 L760 200"/><path d="M636 140 L884 140"/></g>' +
+      '<path d="M636 200 L884 200 L920 300 L600 300 Z" fill="#F6F1E4" opacity=".45"/>' +
+      '<rect x="110" y="84" width="430" height="152" fill="#F8F5EC" stroke="#16222B" stroke-width="1.6"/>' +
+      '<path d="M140 198 L510 198" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#B0701C" stroke-width="1.6"><path d="M168 198 L168 180"/><path d="M240 198 L240 172"/><path d="M312 198 L312 176"/><path d="M384 198 L384 168"/><path d="M456 198 L456 174"/></g>' +
+      '<g stroke="#8D887C" stroke-width=".9" opacity=".75"><path d="M140 116 L330 116"/><path d="M140 132 L280 132"/><path d="M140 148 L364 148"/><path d="M140 164 L240 164"/></g>' +
+      '<g stroke="#1E6F78" stroke-width="1"><path d="M470 116 L500 116"/><path d="M470 132 L500 132"/><path d="M470 148 L500 148"/></g>' +
+      '<ellipse cx="490" cy="302" rx="290" ry="10" fill="#9C9482" opacity=".25"/>' +
+      '<path d="M120 300 L206 238 L782 238 L868 300 Z" fill="#D6CCB6" stroke="#16222B" stroke-width="1.4"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".5"><path d="M258 250 L740 250"/><path d="M214 276 L782 276"/></g>' +
+      '<g stroke="#16222B" stroke-width="1.2" fill="none"><path d="M300 238 L300 206 L342 206 L342 238"/><path d="M440 238 L440 202 L482 202 L482 238"/><path d="M580 238 L580 206 L622 206 L622 238"/></g>' +
+      '<g fill="#16222B" fill-opacity=".5"><rect x="252" y="248" width="26" height="3"/><rect x="352" y="256" width="34" height="3"/><rect x="470" y="252" width="20" height="3"/></g>' +
+      '<path d="M64 60 L64 300" stroke="#8D887C" stroke-width="1" opacity=".5"/>' +
+      '<text x="40" y="336" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">BOARD ROOM · 18 QUARTERS</text>', '0 30 1000 330'),
+
+    runway: artWrap(
+      '<defs>' +
+      '<linearGradient id="gDawnR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#DAD5C8"/><stop offset=".62" stop-color="#E8DCC4"/><stop offset="1" stop-color="#F0E2C6"/></linearGradient>' +
+      '<linearGradient id="gRwyR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C9C2B0"/><stop offset="1" stop-color="#B3AB98"/></linearGradient>' +
+      '</defs>' +
+      '<rect x="0" y="0" width="1000" height="360" fill="url(#gDawnR)"/>' +
+      '<rect x="0" y="150" width="1000" height="50" fill="#FBF5E6" opacity=".55"/>' +
+      '<rect x="0" y="196" width="1000" height="164" fill="url(#gRwyR)"/>' +
+      '<g stroke="#F7F2E6" stroke-width=".8" opacity=".35"><path d="M0 240 L1000 240"/><path d="M0 262 L1000 262"/><path d="M0 292 L1000 292"/><path d="M0 328 L1000 328"/></g>' +
+      '<path d="M300 196 L110 360" stroke="#F6F1E2" stroke-width="3"/>' +
+      '<path d="M700 196 L890 360" stroke="#F6F1E2" stroke-width="3"/>' +
+      '<g stroke="#F6F1E2" stroke-width="2.6"><path d="M500 302 L500 322"/><path d="M500 256 L500 278"/><path d="M500 216 L500 234"/></g>' +
+      '<g fill="#B0701C"><circle cx="352" cy="244" r="2.4"/><circle cx="330" cy="286" r="2.8"/><circle cx="646" cy="244" r="2.4"/><circle cx="672" cy="290" r="2.8"/></g>' +
+      '<path d="M792 196 L792 118 L832 118 L832 196" fill="#D9D2C0" stroke="#16222B" stroke-width="1.2"/>' +
+      '<path d="M778 118 L846 118 L846 102 L778 102 Z" fill="#E4DCCA" stroke="#16222B" stroke-width="1.2"/>' +
+      '<g stroke="#8D887C" stroke-width=".8" opacity=".6"><path d="M784 110 L840 110"/></g>' +
+      '<ellipse cx="500" cy="214" rx="90" ry="6" fill="#9C9482" opacity=".22"/>' +
+      '<g transform="translate(486,178) rotate(-8)">' +
+      '<path d="M-52 0 L44 -5 L64 0 L44 5 L-52 0 Z" fill="#2C3742" fill-opacity=".85"/>' +
+      '<path d="M-6 -2 L-26 -24 L-14 -24 L8 -2 Z" fill="#2C3742" fill-opacity=".7"/>' +
+      '<path d="M-6 2 L-26 24 L-14 24 L8 2 Z" fill="#2C3742" fill-opacity=".7"/>' +
+      '<path d="M46 -2 L58 -16 L62 -16 L56 -2 Z" fill="#2C3742" fill-opacity=".7"/>' +
+      '<path d="M-30 7 L20 7" stroke="#C9A15C" stroke-width="1" opacity=".6"/>' +
+      '</g>' +
+      '<g stroke="#B0701C" stroke-width="1.2" opacity=".55"><path d="M404 192 L456 188"/><path d="M576 186 L624 192"/></g>' +
+      '<text x="40" y="340" font-size="11" fill="#8D887C" font-family="monospace" letter-spacing="3">FIRST FLIGHT · 42 MINUTES</text>', '0 40 1000 320')
+  };
+
   let prologuePick = { seat: 'main', route: 'clean' };
   const PROLOGUE = [
-    { t: '北辰航空 · 三十七年',
+    { t: '北辰航空 · 三十七年', art: 'yard',
       b: `<p>北辰航空在长江边的一个工业区里，两千一百人。三十七年前它靠修理涡桨飞机起家，后来自己造了一款 42 座的支线涡桨，厂区墙上还挂着那张发黄的下线照片。</p>
           <p>你在这家厂干了十九年，从结构组的绘图员做到型号总师办公室。你负责过三个改型项目，没有一个让你真正兴奋过。</p>` },
-    { t: '一款还在卖、但已经在退场的飞机',
+    { t: '一款还在卖、但已经在退场的飞机', art: 'shop',
       b: `<p>P-7 涡桨是公司的现金牛：便宜、皮实、能上碎石跑道。但过去五年，它的市场在以每年 6% 的速度萎缩——支线航司都在换喷气，因为乘客不愿意在 500 公里的航段上多花四十分钟。</p>
           <p>董事会的判断很直接：<b>再不改，五年后这家厂就只剩维修业务。</b></p>` },
     { t: '这个行业只有三个位置',
       b: `<p>干线窄体市场被两家吃掉八成：巨杉航空靠规模和全球服务网，欧陆联合靠机型族谱和产能。第三极是东方商用，靠国家意志硬撑一条产线在爬坡。</p>
           <p>剩下的缝隙有两个：一是 100 座上下、被两家都不太在意的支线喷气；二是 130 座级，正面撞上去，但量大。</p>
           <p><b>你要选一个位置站进去。</b></p>` },
-    { t: '前任总师老周',
+    { t: '前任总师老周', art: 'desk',
       b: `<p>老周在这个位子上坐了六年，去年被换掉。原因是 P-7 的一次改型延期了七个月，客户退了四架。</p>
           <p>他走的那天把一本笔记本留在抽屉里。第一页写着：<b>不要在设计没冻结的时候开始做工装。</b> 你后来才知道这句话让公司赔过一笔钱。</p>` },
-    { t: '董事会给了你十八个季度',
+    { t: '董事会给了你十八个季度', art: 'board',
       b: `<p>会议室的白板上画着一条时间线：第 18 个季度末，累计交付 25 架。做不到，这个型号降级成技术验证机，团队打散。</p>
           <p>你手里有一条总装线、五个部门、两亿现金，和一张还没冻结的图纸。</p>` },
     { t: '你的五个部门',
@@ -124,9 +325,11 @@
     const body = p.choice
       ? `<p>${p.b || ''}</p>` + p.opts.map((o) => `<div class="choice" data-pick="${p.choice}" data-val="${o.k}"><h4>${o.h}</h4><p>${o.d}</p></div>`).join('')
       : p.b;
+    const art = p.art ? artBlock(p.art) : '';
     openModal(`
       <header><span class="t">${esc(p.t)}</span><span class="m">序章 ${i + 1} / ${PROLOGUE.length}</span></header>
       <div class="steps">${PROLOGUE.map((_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>
+      ${art}
       <div class="body">${body}</div>
       <footer>${p.choice ? '<span style="font-size:9.5px;color:var(--ink-40);align-self:center;margin-right:auto">选完继续</span>' : ''}
         <button class="btn" id="proNext">${i < PROLOGUE.length - 1 ? '继续' : '开始立项'}</button></footer>`);
@@ -139,6 +342,7 @@
   }
   function finishPrologue() {
     S = E.newGame({ seed: S.seed, seat: prologuePick.seat, route: prologuePick.route });
+    S.tutOn = true; beatShown = 0;
     closeModal();
     render();
     showOnboard(0);
@@ -222,6 +426,8 @@
       </div>
       <div class="tools">
         <button data-toggle="guide" class="${guided ? 'on' : ''}">引导 ${guided ? '开' : '关'}</button>
+        <button data-audio="toggle">声 ${AUD.muted ? '关' : '开'}</button>
+        <input class="volin" type="range" min="0" max="100" value="${Math.round(AUD.vol * 100)}" data-audio="vol" title="音量">
         <button data-open="codex">图鉴</button>
         <button data-open="legend">图例</button>
         <button data-open="help">规则</button>
@@ -277,7 +483,7 @@
   function renderActions() {
     const tabs = [
       { k: 'tech', n: '技术流程' }, { k: 'line', n: '产线' },
-      { k: 'buy', n: '采购' }, { k: 'biz', n: '商务' }
+      { k: 'buy', n: '采购' }, { k: 'biz', n: '商务' }, { k: 'cust', n: '客户' }
     ];
     const dot = (k) => {
       if (k === 'tech' && S.turn <= C.maxTurn) {
@@ -296,8 +502,7 @@
       ${hint ? `<div class="hintbar"><b>下一步</b>${esc(hint)}</div>` : ''}
       ${guided ? guideBlock() : ''}
       <div class="tabs">${tabs.map((t) => `<button data-tab="${t.k}" class="${tab === t.k ? 'on' : ''}">${t.n}${dot(t.k)}</button>`).join('')}</div>
-      <div class="tabbody">${tabBody()}</div>
-      <div class="actsfoot">${judgeBlock()}</div>`;
+      <div class="tabbody">${tabBody()}</div>`;
   }
   function guideBlock() {
     const list = E.suggest(S);
@@ -317,6 +522,12 @@
     if (idle) return '还有部门产能没用完，把本季的人力派到能推进的工作上。';
     if (E.openOffers(S).length) return '有 ' + E.openOffers(S).length + ' 张订单等你决定。';
     if (S.pc && S.engines < 4 && S.engineOrders.length === 0) return '发动机库存见底，下季可能无件可装。';
+    const g = E.nextGate(S);
+    if (g) {
+      const w = E.workById(g.work);
+      const miss = w.req.filter((r) => !E.workDone(S, r)).map((r) => E.workById(r).n);
+      return '下一道门：' + g.n + '。' + (miss.length ? '缺 ' + miss.join('、') + '。' : g.hint + '。');
+    }
     return null;
   }
 
@@ -369,6 +580,7 @@
           它是最长的前置期：下单到到货 3 季，而且只能整批锁。你在第 13 季想多交 5 架，能救你的动作其实发生在第 10 季。
         </div>`;
     }
+    if (tab === 'cust') return custBody();
     // biz
     const offers = S.offers.filter((o) => o.open && !o.decided);
     const decided = S.offers.filter((o) => o.decided && o.decided !== 'expired');
@@ -397,12 +609,29 @@
   }
 
   /* ---------------- 技术流程 ---------------- */
-  function techBody() {
-    const gates = E.gateState(S);
-    const gateBar = gates.map((g, i) => {
-      const cls = g.done ? 'done' : (i === gates.findIndex((x) => !x.done) ? 'now' : '');
-      return `<div class="gate ${cls}"><span class="gi mono">${g.id}</span><span class="gn">${g.n}</span></div>`;
+  function custBody() {
+    const rows = Object.keys(S.airlines).map(function (name) {
+      const a = S.airlines[name];
+      const visited = S.pending.visits.indexOf(name) >= 0;
+      const relW = Math.max(0, Math.min(100, a.rel));
+      return `<div class="cust">
+        <div class="ch"><b>${esc(name)}</b><em>${esc(a.note)}</em></div>
+        <div class="cstats">
+          <span>机队 <b class="mono">${a.fleet}</b></span>
+          <span>已交付 <b class="mono">${a.got}</b></span>
+          <span>关系 <b class="mono">${a.rel}</b></span>
+          <span>可靠性 <b class="mono">${a.rel9 == null ? '—' : a.rel9}</b></span>
+        </div>
+        <div class="cbar"><i style="width:${relW}%"></i></div>
+        <button class="btn sm" data-visit="${esc(name)}" ${visited ? 'disabled' : ''}>${visited ? '本季已拜访' : '拜访 0.4 亿 · 关系 +8'}</button>
+      </div>`;
     }).join('');
+    return `
+      <div class="note">航司不是抽象买家：它们有机队规模、有关系、有运行反馈。关系越好，下一单的议价空间越大；可靠性低于 55 会掉信誉。</div>
+      ${rows}`;
+  }
+
+  function techBody() {
     const rows = E.DEPTS.map((d) => {
       const cap = E.deptCap(S, d.id);
       const left = E.deptLeft(S, d.id);
@@ -443,7 +672,6 @@
       ? `<button class="btn sm" data-hire="${dept}">增聘 1 ${def.unit} · ${C.hireCost} 亿</button>`
       : '<span class="wok">已满编</span>';
     return `
-      <div class="gatebar">${gateBar}</div>
       <div class="depts">${rows}</div>
       <div class="depthead">
         <span class="dh">${def.n}</span>
@@ -545,7 +773,11 @@
     else if (S.eventWarn) html = `<div class="ev warn"><b>下季预告 · ${esc(S.eventWarn.title)}</b>${esc(S.eventWarn.text)}</div>`;
     else html = '<div class="ev empty"><b>暂无事件</b>事件会提前一季预告，不会突然扣你产能。</div>';
     const head = S.event ? '本季生效' : S.eventWarn ? '下季预告' : '提前 1 季预告';
-    $('.events').innerHTML = `<header><span class="t">事件</span><span class="m">${head}</span></header>${html}`;
+    const echoes = (S.echoes || []).slice(-2);
+    const echoHtml = echoes.length
+      ? '<div class="echoline">回响：' + echoes.map(function (e) { return '第' + e.turn + '季「' + esc(e.title) + '」'; }).join(' · ') + '</div>'
+      : '';
+    $('.events').innerHTML = `<header><span class="t">事件</span><span class="m">${head}</span></header>${html}${echoHtml}`;
   }
 
   function renderLast() {
@@ -573,6 +805,42 @@
       </div>`;
   }
 
+  function tutorialGoals() {
+    const t = S.turn;
+    if (t === 1) return [
+      { t: '在右上方选一个融资方案', on: !!S.finance, go: null },
+      { t: '到「技术流程」把五个部门的产能派出去', on: Object.keys(S.pending.assign).length > 0, go: 'tech' },
+      { t: '点「提交本季」结束第一季', on: false, go: null }
+    ];
+    if (t === 2) return [
+      { t: '到「采购」锁定第一批发动机（12–24 台）', on: S.engineOrders.length > 0 || S.engines > 0, go: 'buy' },
+      { t: '继续派工，然后提交', on: Object.keys(S.pending.assign).length > 0, go: 'tech' }
+    ];
+    if (t === 3) return [
+      { t: '到「商务」接下第一张订单', on: S.slots.length > 0, go: 'biz' },
+      { t: '看一眼「本季建议」，它会告诉你还差什么', on: true, go: null }
+    ];
+    if (t === 4) return [
+      { t: '到「产线」投一次扩线（产能翻倍）', on: S.expandReady !== null || S.pending.expand, go: 'line' },
+      { t: '招一个人，让关键路径变短', on: S.hires > 0 || Object.keys(S.pending.hires).length > 0, go: 'tech' }
+    ];
+    return null;
+  }
+
+  function renderTutorial() {
+    const host = document.querySelector('.tutorial');
+    if (!host) return;
+    const goals = tutorialGoals();
+    if (!guided || !goals || S.ending || !S.tutOn) { host.style.display = 'none'; host.innerHTML = ''; return; }
+    host.style.display = '';
+    const done = goals.filter((g) => g.on).length;
+    host.innerHTML = `
+      <span class="tt">新手目标 · 第 ${S.turn} 季</span>
+      <span class="tg">${goals.map((g, i) => `<span class="ti ${g.on ? 'on' : ''}">${g.on ? '✓' : i + 1} ${esc(g.t)}</span>`).join('')}</span>
+      <span class="tp mono">${done}/${goals.length}</span>
+      <button class="tx" data-tut="off" title="关闭新手引导">知道了</button>`;
+  }
+
   function renderFoot() {
     if (S.ending) {
       $('.check').innerHTML = `<span class="chk on"><i>✓</i>本局结束：${esc(S.ending.title)}</span>
@@ -597,17 +865,31 @@
   }
 
   function render() {
-    renderHud(); renderLine(); renderActions(); renderOrders(); renderGates(); renderEvent(); renderLast(); renderFoot();
+    renderHud(); renderTutorial(); renderLine(); renderActions(); renderOrders(); renderGates(); renderEvent(); renderLast(); renderFoot();
     $('.commit').disabled = !!S.ending || modalOpen();
   }
 
+  function maybeShowBeat() {
+    if (S.story && !S.ending && beatShown !== S.turn && !modalOpen()) {
+      beatShown = S.turn;
+      showStory();
+    }
+  }
+
   /* ---------------- 弹窗 ---------------- */
+  const BEAT_ART = { firstflight: 'runway', visit: 'yard', notebook: 'desk', board: 'board' };
+  function beatArt(id) {
+    const k = BEAT_ART[id];
+    return k ? artBlock(k) : '';
+  }
+
   function showStory() {
     const st = S.story;
     if (!st) return;
     if (st.type === 'note') {
       openModal(`
         <header><span class="t">${esc(st.title)}</span><span class="m">情节 · 第 ${S.turn} 季</span></header>
+        ${beatArt(st.id)}
         <div class="body">
           <p>${esc(st.text)}</p>
           ${st.note ? `<div class="attr">${esc(st.note)}</div>` : ''}
@@ -617,6 +899,7 @@
     }
     openModal(`
       <header><span class="t">${esc(st.title)}</span><span class="m">现场抉择 · 第 ${S.turn} 季</span></header>
+      ${beatArt(st.id)}
       <div class="body">
         <p>${esc(st.text)}</p>
         <div class="choice" data-story="a">
@@ -658,7 +941,7 @@
   }
 
   let codexSel = null;
-  let storyShown = 0;
+  let beatShown = 0;
   function showCodex(id) {
     const list = window.CODEX || [];
     if (!list.length) {
@@ -685,6 +968,41 @@
         </div>
       </div>
       <footer><button class="btn" data-close>关闭</button></footer>`, true);
+  }
+
+
+  /* ---------------- 第三章垂直切片：箭体 ---------------- */
+  const RS = { route: null, launched: false };
+  function rocketCalc(route) { return E.rocketCalc(route, 8); }
+
+  function showRocket() {
+    const calc = RS.route ? rocketCalc(RS.route) : null;
+    const body = !RS.route
+      ? `<p>主线结束，总装线空出来了。同一批工装、同一批结构工程师，可以转向箭体。</p>
+         <p>这一步只问一件事：<b>做一次性，还是做可复用？</b></p>
+         <div class="choice" data-route="expendable"><h4>一次性 · 单发 4.2 亿</h4><p>不追加研制，季度产能决定交付。毛利薄，但不赌未来。</p></div>
+         <div class="choice" data-route="reusable"><h4>可复用 · 研制 18 亿，单发 1.32 亿</h4><p>前三个季度只有支出没有收入；一旦飞起来，单发毛利翻倍。</p></div>`
+      : `<p>${RS.route === 'reusable' ? '可复用路线：前三季纯投入，第四季开始回收。' : '一次性路线：每季稳定出货，现金流平缓。'}</p>
+         <div class="replist">
+           ${calc.rows.map((r) => `<div><span>第 ${r.q} 季${r.dev ? ' · 研制 ' + r.dev.toFixed(0) + ' 亿' : ''}${r.n ? ' · 交付 ' + r.n + ' 发' : ''}</span><span class="mono ${r.gross - r.dev >= 0 ? 'pos' : 'neg'}">${(r.cash).toFixed(1)} 亿</span></div>`).join('')}
+         </div>
+         <div class="attr">八季后：交付 ${calc.flown} 发，账上 ${calc.cash.toFixed(1)} 亿，最低点 ${calc.minCash.toFixed(1)} 亿。单发成本 ${calc.unit} 亿。
+         ${RS.route === 'reusable'
+            ? '研制 18 亿 ÷（4.68 − 1.80）≈ 6.25 发回本。同一份 12 发合同，可复用最终多赚 16 亿 —— 但中途现金会掉到 ' + calc.minCash.toFixed(0) + ' 亿，得先找到人替你垫。'
+            : '不需要赌订单量，也不会中途失血；代价是同样的合同少赚 16 亿。'}</div>
+         <p style="font-size:9.5px;color:var(--ink-40)">这是垂直切片：不含 TC/PC、客户谈判、发射工位排产与复用翻修，也不进入主线存档。只验证「一次性 vs 可复用」的成本交叉点与现金流风险。</p>`;
+    openModal(`
+      <header><span class="t">第三章 · 把总装能力转向箭体</span><span class="m">垂直切片</span></header>
+      <div class="body">${body}</div>
+      <footer>
+        ${RS.route ? '<button class="btn ghost" id="rsBack">重选</button>' : ''}
+        <button class="btn" data-close>${RS.route ? '回到结项' : '先不进入'}</button>
+      </footer>`, true);
+    document.querySelectorAll('[data-route]').forEach(function (el) {
+      el.onclick = function () { RS.route = el.dataset.route; showRocket(); };
+    });
+    const back = document.getElementById('rsBack');
+    if (back) back.onclick = function () { RS.route = null; showRocket(); };
   }
 
   function showLegend() {
@@ -803,7 +1121,12 @@
         ${notes ? `<h3>本季发生了什么</h3>${notes}` : ''}
       </div>
       <footer><button class="btn" id="settleNext">${S.ending ? '看结项' : '进入第 ' + (r.turn + 1) + ' 季'}</button></footer>`);
-    $('#settleNext').onclick = () => { closeModal(); if (S.ending) showEnding(); render(); };
+    $('#settleNext').onclick = () => {
+      closeModal();
+      if (S.ending) { showEnding(); return; }
+      render();
+      maybeShowBeat();
+    };
   }
 
   function showEnding() {
@@ -834,7 +1157,8 @@
           <li>${S.finance === 'gov' ? '你拿了政府基金，所以背了 25 架的交付承诺。' : '你只拿了银行贷款，没有承诺压力，但钱也少了一半多。'}</li>
         </ul>
       </div>
-      <footer><button class="btn" id="again">再开一局</button></footer>`, true);
+      <footer><button class="btn ghost" id="rocket">进入第三章 · 箭体</button><button class="btn" id="again">再开一局</button></footer>`, true);
+    $('#rocket').onclick = () => { RS.route = null; showRocket(); };
     $('#again').onclick = () => { closeModal(); restart(); };
   }
 
@@ -845,17 +1169,20 @@
     const prev = S.delivered;
     const r = E.commit(S);
     r.gained = S.delivered - prev;
+    if (S.stopTurn === r.turn) sfx('alarm');
+    else if (r.gained > 0) sfx('deliver');
+    else sfx('ok');
     render();
     showSettlement(r);
   }
   function restart() {
-    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {};
+    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {}; S.tutOn = true; beatShown = 0;
     render();
     showOnboard(0);
   }
 
   document.addEventListener('click', (ev) => {
-    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run]');
+    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run],[data-visit],[data-audio],[data-route]');
     if (!t) return;
     if (t.dataset.pick) {
       prologuePick[t.dataset.pick] = t.dataset.val;
@@ -870,7 +1197,9 @@
     if (t.dataset.assist === 'auto') { E.autoAssign(S); render(); return toast('已按关键路径自动派工，你可以继续调整。'); }
     if (t.dataset.codex) return showCodex(t.dataset.codex);
     if (t.dataset.story) { E.setStory(S, t.dataset.story); closeModal(); render(); return; }
-    if (t.dataset.toggle === 'guide') { guided = !guided; render(); return; }
+    if (t.dataset.route) { RS.route = t.dataset.route; return showRocket(); }
+    if (t.dataset.toggle === 'guide') { guided = !guided; S.tutOn = guided; render(); return; }
+    if (t.dataset.tut === 'off') { S.tutOn = false; render(); return; }
     if (t.dataset.run === 'all') {
       let n = 0;
       E.suggest(S).forEach((g) => { try { if (g.run(S)) n += 1; } catch (e) { /* 忽略 */ } });
@@ -882,13 +1211,19 @@
     if (t.dataset.open === 'help') return showHelp();
     if (t.dataset.open === 'restart') return restart();
     if (t.dataset.bay !== undefined) return showBay(+t.dataset.bay);
-    if (t.dataset.tab) { tab = t.dataset.tab; return render(); }
+    if (t.dataset.tab) { tab = t.dataset.tab; sfx('tab'); return render(); }
     if (t.dataset.dept) { dept = t.dataset.dept; return render(); }
     if (t.dataset.buy) {
       const res = E.buyEngines(S, +t.dataset.buy);
       if (!res.ok) toast(res.reason, 'warn'); else toast('已锁定 ' + t.dataset.buy + ' 台，' + (S.turn + 3) + ' 季后到货。');
       return render();
     }
+    if (t.dataset.visit) {
+      const r = E.visitAirline(S, t.dataset.visit);
+      if (!r.ok) toast(r.reason, 'warn'); else toast('已安排拜访，提交后扣 0.4 亿。');
+      return render();
+    }
+    if (t.dataset.audio === 'toggle') { AUD.muted = !AUD.muted; render(); return; }
     if (t.dataset.act === 'ot') { E.toggleOvertime(S); return render(); }
     if (t.dataset.act === 'expand') {
       const res = E.requestExpand(S);
@@ -938,6 +1273,10 @@
       delivered: `<b>已交付 ${S.delivered} / ${C.target}</b><br>第 ${C.maxTurn} 季结束时 ≥${C.target} 架且现金为正才算通关。`
     };
     tip(k, map[key] || '');
+  });
+  document.addEventListener('input', (ev) => {
+    const el = ev.target.closest('[data-audio="vol"]');
+    if (el) { AUD.vol = Number(el.value) / 100; if (!AUD.muted) tone(660, 0.06, 'sine', 0.05); }
   });
   document.addEventListener('mouseout', (ev) => { if (ev.target.closest('[data-tip]')) hideTip(); });
 
