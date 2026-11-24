@@ -654,7 +654,7 @@ ok('F: room card keeps a blank signature blank', m.roomCardFacts({}, 'r-c-major'
 ok('F: unknown room gives no card', m.roomCardFacts({}, 'nope') === null);
 ok('F: room card can be downloaded', src.indexOf('function downloadRoomCard') !== -1);
 ok('F: room card sends nothing to a server', src.indexOf('fetch(') === -1);
-ok('F: room card is offered on the pass sheet', src.indexOf('存这张校记卡') !== -1);
+ok('F: room card is offered on the pass sheet', src.indexOf('带走这张校记卡') !== -1);
 
 /* ---------- 22. 生产反馈三项 ---------- */
 // 1) 地图 Avatar 不拦截交互，节点可键盘操作
@@ -693,6 +693,23 @@ ok('R: empty click explains itself', src.indexOf('桥还是空的，先点「听
 ok('R: audio gate failure is visible', src.indexOf('声音没起来：浏览器还没解锁音频') !== -1);
 ok('R: mission card matches the new button', src.indexOf('先点「听骨架」') !== -1);
 ok('R: old wording is gone', src.indexOf('先点「试听整段」') === -1);
+
+/* ---------- 23. 结算里的纪念卡 ---------- */
+ok('K: card is offered as a keepsake, not a save file', src.indexOf('带走这张校记卡') !== -1);
+ok('K: old tool-like label is gone', src.indexOf("'存这张校记卡'") === -1);
+ok('K: note says it is not the save', src.indexOf('它不是存档——你的进度已经自动保存') !== -1);
+ok('K: note says it is optional', src.indexOf('不带它也能继续') !== -1);
+ok('K: card previews in place before download', src.indexOf('preview.innerHTML = roomCardMarkup(id)') !== -1);
+ok('K: preview can be collapsed', src.indexOf("openBtn.textContent = '收起预览'") !== -1);
+ok('K: download reports back', src.indexOf("已生成「' + roomCardFilename(id)") !== -1);
+ok('K: format is stated honestly', src.indexOf('HTML 文件，用浏览器打开或打印') !== -1);
+ok('K: blocked download has a fallback', src.indexOf('用「打印 / 预览」另存') !== -1);
+ok('K: print path exists', typeof m.printRoomCard === 'function');
+ok('K: filename is readable', /^五度环-校记卡-.+\.html$/.test(m.roomCardFilename('r-c-major')), m.roomCardFilename('r-c-major'));
+ok('K: next room stays the primary button',
+  src.indexOf("nextLabelFor(thisRoom), 'btn btn-ink'") !== -1 && src.indexOf("mkBtn('带走这张校记卡', 'btn btn-quiet'") !== -1);
+ok('K: card block is skipped during the tour', src.indexOf('!(state.tour && state.tour.active)) {\n    var thisRoom') !== -1);
+ok('K: no third-party or network use', src.indexOf('fetch(') === -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {

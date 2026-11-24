@@ -988,6 +988,17 @@ function roomCardMarkup(id) {
   '</div>';
 }
 
+function roomCardFilename(id) {
+  return '五度环-校记卡-' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : 'room') + '.html';
+}
+
+function printRoomCard(id) {
+  var host = document.getElementById('diplomaHost');
+  if (!host) return;
+  host.innerHTML = roomCardMarkup(id);
+  window.print();
+}
+
 function downloadRoomCard(id) {
   var html = '<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8">' +
     '<title>五度环 · ' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : '校记卡') + '</title><style>' +
@@ -1002,7 +1013,7 @@ function downloadRoomCard(id) {
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = '五度环-校记卡-' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : 'room') + '.html';
+  a.download = roomCardFilename(id);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -5313,7 +5324,7 @@ function showVerdict(o) {
   if (passLike && state.roomId && ROOM_INDEX[state.roomId] && !(state.tour && state.tour.active)) {
     var thisRoom = ROOM_INDEX[state.roomId];
     actions.appendChild(mkBtn(nextLabelFor(thisRoom), 'btn btn-ink', function () { goNext(thisRoom); }));
-    actions.appendChild(mkBtn('存这张校记卡', 'btn btn-quiet', function () { downloadRoomCard(state.roomId); }));
+    body.appendChild(cardOfferBlock(state.roomId));
   }
   if (passLike && !(state.tour && state.tour.active)) {
     actions.appendChild(mkBtn('回环城', 'btn btn-quiet', function () { hideVerdict(); clearRoom(ROOM_INDEX[state.roomId]); }));
@@ -5551,6 +5562,61 @@ function tourBarMarkup() {
     ? '这一关过了 · 提示 ' + ev.hints + ' 次'
     : label + ' · ' + slot + (cur ? ' · ' + cur.title : '') + ' · 本关提示 ' + ev.hints + ' 次';
   return { text: text, done: done, index: t.index };
+}
+
+// 结算里的纪念卡：先解释、再预览，下载是次要出口
+function cardOfferBlock(id) {
+  var room = ROOM_INDEX[id];
+  var box = document.createElement('div');
+  box.className = 'card-offer';
+
+  var note = document.createElement('p');
+  note.className = 'card-note';
+  note.textContent = '这一页可以带走：一张含 Avatar、掌握度与这一区校记的单页，可打印或分享。'
+    + '它不是存档——你的进度已经自动保存，不带它也能继续。';
+  box.appendChild(note);
+
+  var preview = document.createElement('div');
+  preview.className = 'card-preview';
+  preview.hidden = true;
+  var status = document.createElement('p');
+  status.className = 'card-status';
+  status.hidden = true;
+
+  var foot = document.createElement('div');
+  foot.className = 'card-actions';
+
+  var openBtn = mkBtn('带走这张校记卡', 'btn btn-quiet', function () {
+    if (preview.hidden) {
+      preview.innerHTML = roomCardMarkup(id);
+      preview.hidden = false;
+      openBtn.textContent = '收起预览';
+      status.hidden = true;
+    } else {
+      preview.hidden = true;
+      preview.innerHTML = '';
+      openBtn.textContent = '带走这张校记卡';
+    }
+  });
+  openBtn.setAttribute('aria-expanded', 'false');
+  box.appendChild(openBtn);
+
+  var printBtn = mkBtn('打印 / 预览', 'btn btn-quiet', function () {
+    if (preview.hidden) { preview.innerHTML = roomCardMarkup(id); preview.hidden = false; openBtn.textContent = '收起预览'; }
+    printRoomCard(id);
+  });
+  var dlBtn = mkBtn('下载 HTML', 'btn btn-quiet', function () {
+    downloadRoomCard(id);
+    status.hidden = false;
+    status.textContent = '已生成「' + roomCardFilename(id) + '」（HTML 文件，用浏览器打开或打印）。'
+      + '如果浏览器拦下了下载，用「打印 / 预览」另存。';
+  });
+  foot.appendChild(printBtn);
+  foot.appendChild(dlBtn);
+  foot.appendChild(status);
+  box.appendChild(foot);
+  box.appendChild(preview);
+  return box;
 }
 
 function masteryEvidenceText(id) {
@@ -5930,6 +5996,7 @@ if (typeof module !== 'undefined' && module.exports) {
     buildTour: buildTour, tourCurrent: tourCurrent, tourSummary: tourSummary,
     masteryEvidenceText: masteryEvidenceText, noteHintUse: noteHintUse, noteFault: noteFault,
     faultNarrative: faultNarrative, roomCardFacts: roomCardFacts, roomCardMarkup: roomCardMarkup,
+    roomCardFilename: roomCardFilename, printRoomCard: printRoomCard, cardOfferBlock: cardOfferBlock,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
     diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,
