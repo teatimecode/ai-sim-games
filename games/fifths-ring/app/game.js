@@ -334,13 +334,126 @@ function slotIsClean(level, slots, slot, pitch) {
 
 /* ================= 4. 音频 ================= */
 
+/* ================= 4a. 音频状态机 ================= */
+
+/* 只记录确实能检测到的事实，不推断设备静音、音量或输出路由。
+   状态：undetected | needs-gesture | starting | ready | suspended | unsupported | failed */
+function safeAudioError(e) {
+  var m = (e && (e.name || e.message)) || 'unknown';
+  return String(m).slice(0, 80);
+}
+
+function createAudioController(opts) {
+  opts = opts || {};
+  var Ctor = opts.Ctor;
+  var now = opts.now || function () { return Date.now(); };
+  var onState = opts.onState || function () {};
+  var c = {
+    ctx: null, state: 'undetected', created: 0,
+    lastEnabledAt: null, lastTestAt: null, heard: null,
+    lastError: null, gesture: false
+  };
+
+  function emit() { try { onState(c); } catch (e) { /* 渲染失败不影响音频 */ } }
+  function set(s, err) { c.state = s; if (err !== undefined) c.lastError = err; emit(); }
+
+  function init() {
+    if (!Ctor) { set('unsupported'); return c; }
+    if (c.state === 'undetected') set('needs-gesture');
+    return c;
+  }
+
+  function listen() {
+    if (!c.ctx || !c.ctx.addEventListener) return;
+    c.ctx.addEventListener('statechange', function () {
+      if (!c.ctx) return;
+      var s = c.ctx.state;
+      if (s === 'running') {
+        if (c.state !== 'ready') { c.lastEnabledAt = c.lastEnabledAt || now(); set('ready'); }
+      } else if (s === 'suspended' || s === 'interrupted') {
+        set('suspended');
+      } else if (s === 'closed') {
+        set('failed', 'closed');
+      }
+    });
+  }
+
+  /* 必须在真实用户手势里调用；创建一次，之后只做 resume */
+  function unlock() {
+    c.gesture = true;
+    if (!Ctor) { set('unsupported'); return null; }
+    if (!c.ctx) {
+      set('starting');
+      try {
+        c.ctx = new Ctor();
+        c.created++;
+        listen();
+      } catch (e) {
+        set('failed', 'create:' + safeAudioError(e));
+        return null;
+      }
+    }
+    if (c.ctx.state === 'running') {
+      c.lastEnabledAt = c.lastEnabledAt || now();
+      set('ready');
+      return c.ctx;
+    }
+    try {
+      var p = c.ctx.resume();
+      if (p && typeof p.then === 'function') {
+        p.then(function () {
+          if (c.ctx && c.ctx.state === 'running') { c.lastEnabledAt = now(); set('ready'); }
+          else set('suspended');
+        }, function (e) {
+          set('failed', 'resume:' + safeAudioError(e));
+        });
+      } else if (c.state === 'starting') {
+        set('suspended');
+      }
+    } catch (e) {
+      set('failed', 'resume:' + safeAudioError(e));
+    }
+    return c.ctx;
+  }
+
+  /* 从后台回来时重读状态，不主动播放 */
+  function refresh() {
+    if (!c.ctx) {
+      if (Ctor && c.state === 'undetected') set('needs-gesture');
+      return c;
+    }
+    var s = c.ctx.state;
+    if (s === 'running') {
+      if (c.state !== 'ready') { c.lastEnabledAt = c.lastEnabledAt || now(); set('ready'); }
+    } else if (s === 'suspended' || s === 'interrupted') {
+      if (c.state !== 'suspended') set('suspended');
+    } else if (s === 'closed') {
+      if (c.state !== 'failed') set('failed', 'closed');
+    }
+    return c;
+  }
+
+  function markTested() { c.lastTestAt = now(); c.heard = null; emit(); }
+  function markHeard(v) { c.heard = v; emit(); }
+
+  return { state: c, init: init, unlock: unlock, refresh: refresh, markTested: markTested, markHeard: markHeard };
+}
+
 var actx = null, masterGain = null, wetGain = null, reverb = null;
 
+var audioCtl = createAudioController({
+  Ctor: (typeof window !== 'undefined' ? (window.AudioContext || window.webkitAudioContext) : undefined),
+  onState: function () {
+    if (typeof renderAudioChip === 'function' && typeof document !== 'undefined' && document.getElementById && document.getElementById('audioChip')) renderAudioChip();
+  }
+});
+
+/* 所有发声入口的唯一门：创建或恢复上下文，失败时返回 null 并留下状态 */
 function ensureAudio() {
-  if (actx) { if (actx.state === 'suspended') actx.resume(); return actx; }
-  var AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  actx = new AC();
+  var c = audioCtl.unlock();
+  if (!c) return null;
+  actx = c;
+  if (masterGain) return actx;
   masterGain = actx.createGain();
   masterGain.gain.value = 0.85;
   var lp = actx.createBiquadFilter();
@@ -362,6 +475,590 @@ function ensureAudio() {
   reverb.connect(wetGain);
   wetGain.connect(lp);
   return actx;
+}
+
+
+/* ================= 4c. 音频状态与诊断 UI ================= */
+
+var AUDIO_TEXT = {
+  'undetected': '待检测',
+  'needs-gesture': '待启用',
+  'starting': '启用中',
+  'ready': '可用',
+  'suspended': '已暂停',
+  'unsupported': '不支持',
+  'failed': '异常'
+};
+
+function audioShort(st) { return AUDIO_TEXT[st] || '未知'; }
+function audioLabel(st) { return '声音·' + audioShort(st); }
+
+function renderAudioChip() {
+  if (typeof document === 'undefined' || !document.getElementById) return;
+  var chip = document.getElementById('audioChip');
+  if (!chip) return;
+  var st = audioCtl.state.state;
+  var txt = document.getElementById('audioChipText');
+  if (txt) txt.textContent = audioLabel(st);
+  chip.setAttribute('data-audio-state', st);
+  chip.setAttribute('aria-label', audioLabel(st) + '，点击查看声音诊断');
+  var live = document.getElementById('audioLive');
+  if (live) live.textContent = '声音状态：' + audioShort(st);
+}
+
+function fmtClock(ts) {
+  if (!ts) return '未记录';
+  var d = new Date(ts);
+  return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+}
+
+function audioSupported() {
+  return !!(typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext));
+}
+
+function audioDiagText() {
+  var c = audioCtl.state;
+  return [
+    '五度环 · 声音诊断',
+    'Web Audio 支持：' + (audioSupported() ? '是' : '否'),
+    '状态：' + audioLabel(c.state),
+    '音频上下文：' + (c.ctx ? c.ctx.state : '未创建'),
+    '最近启用：' + fmtClock(c.lastEnabledAt),
+    '最近测试：' + fmtClock(c.lastTestAt),
+    '人耳确认：' + (c.heard === 'yes' ? '已听到' : c.heard === 'no' ? '未听到' : '未确认'),
+    '页面可见性：' + (typeof document !== 'undefined' ? document.visibilityState : '未知'),
+    '用户手势触发：' + (c.gesture ? '是' : '否'),
+    '创建上下文次数：' + c.created,
+    '最近错误：' + (c.lastError || '无'),
+    '说明：声音由浏览器 Web Audio 实时合成，无需下载音频文件。'
+  ].join('\n');
+}
+
+function playTestTone() {
+  var c = ensureAudio();
+  if (!c) return false;
+  var t0 = c.currentTime + 0.05;
+  tone(84, t0, 0.16, 0.09);
+  tone(91, t0 + 0.22, 0.24, 0.09);
+  audioCtl.markTested();
+  return true;
+}
+
+function renderAudioPanel() {
+  var body = document.getElementById('audioBody');
+  if (!body) return;
+  var c = audioCtl.state;
+  body.innerHTML = '';
+
+  var line = document.createElement('p');
+  line.className = 'audio-state-line';
+  line.textContent = '当前状态：' + audioLabel(c.state);
+  body.appendChild(line);
+
+  var note = document.createElement('p');
+  note.className = 'audio-note';
+  note.textContent = '声音由浏览器 Web Audio 实时合成，无需下载音频文件。页面不会自动发声，必须由你点一下才能启用。';
+  body.appendChild(note);
+
+  var facts = document.createElement('dl');
+  facts.className = 'audio-facts';
+  var rows = [
+    ['Web Audio 支持', audioSupported() ? '是' : '否'],
+    ['音频上下文', c.ctx ? c.ctx.state : '未创建'],
+    ['最近启用', fmtClock(c.lastEnabledAt)],
+    ['最近测试', fmtClock(c.lastTestAt)],
+    ['人耳确认', c.heard === 'yes' ? '已听到' : c.heard === 'no' ? '未听到' : '未确认'],
+    ['页面可见性', (typeof document !== 'undefined' ? document.visibilityState : '未知')],
+    ['手势触发', c.gesture ? '是' : '否'],
+    ['创建次数', String(c.created)],
+    ['最近错误', c.lastError || '无']
+  ];
+  rows.forEach(function (r) {
+    var dt = document.createElement('dt');
+    dt.textContent = r[0];
+    var dd = document.createElement('dd');
+    dd.textContent = r[1];
+    facts.appendChild(dt);
+    facts.appendChild(dd);
+  });
+  body.appendChild(facts);
+
+  if (c.lastTestAt) {
+    var ask = document.createElement('p');
+    ask.className = 'audio-ask';
+    ask.textContent = '刚才那两声测试音，你听到了吗？';
+    body.appendChild(ask);
+    var hb = document.createElement('div');
+    hb.className = 'audio-heard';
+    hb.appendChild(mkBtn('我听到了', 'btn' + (c.heard === 'yes' ? ' btn-ink' : ''), function () {
+      audioCtl.markHeard('yes');
+      renderAudioPanel();
+    }));
+    hb.appendChild(mkBtn('没听到', 'btn' + (c.heard === 'no' ? ' btn-ink' : ''), function () {
+      audioCtl.markHeard('no');
+      renderAudioPanel();
+    }));
+    body.appendChild(hb);
+  }
+
+  if (c.heard === 'no') {
+    var tips = document.createElement('ul');
+    tips.className = 'audio-tips';
+    [
+      '先确认手机媒体音量不是 0，也没有开静音或勿扰模式。',
+      '如果连着蓝牙耳机或外放音箱，看看声音是不是被路由到了别的设备。',
+      '确认这个页面在前台；从后台切回来的应用可能被系统暂停声音。',
+      '回到这里再点一次「启用声音」。',
+      '仍然没声，可以换一个浏览器再试，并把这个面板的诊断摘要一起反馈。'
+    ].forEach(function (t) {
+      var li = document.createElement('li');
+      li.textContent = t;
+      tips.appendChild(li);
+    });
+    body.appendChild(tips);
+  }
+
+  if (c.state === 'unsupported') {
+    var un = document.createElement('p');
+    un.className = 'audio-note';
+    un.textContent = '这个浏览器没有可用的 Web Audio 接口。游戏的进度、判定和文字反馈都不依赖声音，可以继续玩。';
+    body.appendChild(un);
+  }
+
+  var actions = document.getElementById('audioActions');
+  actions.innerHTML = '';
+  actions.appendChild(mkBtn('启用声音', 'btn btn-ink', function () {
+    ensureAudio();
+    renderAudioPanel();
+  }));
+  actions.appendChild(mkBtn('测试声音', 'btn', function () {
+    playTestTone();
+    renderAudioPanel();
+  }));
+  actions.appendChild(mkBtn('复制诊断', 'btn btn-quiet', function () {
+    var text = audioDiagText();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { flashChar('诊断摘要已复制。'); }, function () { showDiagFallback(text); });
+      } else {
+        showDiagFallback(text);
+      }
+    } catch (e) {
+      showDiagFallback(text);
+    }
+  }));
+}
+
+function showDiagFallback(text) {
+  var body = document.getElementById('audioBody');
+  if (!body) return;
+  var box = document.getElementById('audioDiagBox');
+  if (!box) {
+    box = document.createElement('textarea');
+    box.id = 'audioDiagBox';
+    box.className = 'audio-diag-box';
+    box.readOnly = true;
+    body.appendChild(box);
+  }
+  box.value = text;
+  box.focus();
+  box.select();
+}
+
+function openAudioPanel() {
+  renderAudioPanel();
+  var v = document.getElementById('audioVeil');
+  if (v) v.hidden = false;
+}
+
+
+/* ================= 4d. 试音与对照 ================= */
+
+function openWarmup() {
+  var host = document.getElementById('warmupRing');
+  if (!host) return;
+  host.innerHTML = '';
+  var names = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+  var played = 0;
+  host.appendChild(buildRing({
+    order: 'fifths',
+    selected: [],
+    onNode: function (pc) {
+      ensureAudio();
+      var c = ensureAudio();
+      if (c) { tone(60 + pc, c.currentTime + 0.02, 1.1, 0.12); tone(48 + pc, c.currentTime + 0.02, 1.1, 0.07); }
+      played++;
+      var hint = document.getElementById('warmupHint');
+      if (hint) hint.textContent = played < 3 ? '再点几块，听听它们合不合。' : '这就是常音。城里的一切都搭在它上面。';
+    }
+  }));
+  var hint = document.getElementById('warmupHint');
+  if (hint) hint.textContent = '点一块石头，听听它。';
+  document.getElementById('warmupVeil').hidden = false;
+}
+
+function closeWarmup() {
+  document.getElementById('warmupVeil').hidden = true;
+  state.warmupDone = true;
+  saveState();
+}
+
+/* 每类房间的标准答案，用于失败后的对照试听 */
+function referencePlan(room) {
+  if (room.kind === 'counterpoint') {
+    var lv = LEVELS[room.cp];
+    return lv && lv.reference ? { type: 'exercise', level: lv, slots: lv.reference } : null;
+  }
+  if (room.kind === 'scale') return { type: 'scale', pcs: room.target.pcs, tonic: room.target.tonic };
+  if (room.kind === 'harmony') {
+    var chords = room.situations.map(function (s) {
+      return s.options.filter(function (o) { return harmonyIssues(s.prev, o, room.tonic).length === 0; })[0];
+    }).filter(Boolean);
+    return chords.length ? { type: 'chords', chords: chords } : null;
+  }
+  if (room.kind === 'set') {
+    if (room.mode === 'normal') {
+      var best = minSpanOf(room.members);
+      return { type: 'order', pcs: room.members, order: orderFrom(room.members, best.starts[0]).ordered };
+    }
+    var ghost = room.members.map(function (p) { return (p + room.transpose) % 12; });
+    return { type: 'set', pcs: commonTonesOf(room.members, ghost) };
+  }
+  if (room.kind === 'pop') return { type: 'chords', chords: room.chords.slice() };
+  if (room.kind === 'rhythm') return room.rhythm.answer ? { type: 'rhythm', room: room, bars: room.rhythm.answer } : null;
+  if (room.kind === 'compass') return { type: 'triad', pc: room.compass.to.pc, mode: room.compass.to.mode };
+  if (room.kind === 'form') return { type: 'piece', room: room };
+  return null;
+}
+
+function playReference(plan) {
+  if (!plan) return;
+  var c = ensureAudio();
+  if (!c) return;
+  var t0 = c.currentTime + 0.06;
+
+  if (plan.type === 'exercise') {
+    playExercise(plan.level, plan.slots);
+  } else if (plan.type === 'scale') {
+    var order = orderFrom(plan.pcs, plan.tonic).ordered;
+    order.forEach(function (pc, i) { tone(60 + pc, t0 + i * 0.34, 0.34, 0.15); });
+  } else if (plan.type === 'chords') {
+    plan.chords.forEach(function (ch, i) { playChord(ch.pcs, t0 + i * 0.9, 0.8, 0.09); });
+  } else if (plan.type === 'set') {
+    playChord(plan.pcs, t0, 1.2, 0.1);
+  } else if (plan.type === 'order') {
+    plan.order.forEach(function (pc, i) { tone(60 + pc, t0 + i * 0.3, 0.3, 0.14); });
+  } else if (plan.type === 'rhythm') {
+    playRhythm(plan.room, { bars: plan.bars });
+  } else if (plan.type === 'triad') {
+    playChord(tonicTriad({ pc: plan.pc, mode: plan.mode }), t0, 1.1, 0.1);
+  } else if (plan.type === 'piece') {
+    playForm(plan.room, 0, plan.room.form.bars.length);
+  }
+}
+
+
+/* ================= 4e. 对照：先放你写的，再放修好的 ================= */
+
+function playCpOnce(level, slots) {
+  var c = ensureAudio();
+  if (!c) return 0;
+  var sp = level.species;
+  var unit = sp === 1 ? 0.6 : 0.32;
+  var total = sp === 1 ? level.cantus.length : level.cantus.length * 2 - 1;
+  var t0 = c.currentTime + 0.05;
+  for (var j = 0; j < total; j++) {
+    var cf = level.cantus[sp === 1 ? j : Math.floor(j / 2)];
+    if (slots[j] != null) playDyad(cf, slots[j], t0 + j * unit, unit * 0.95);
+    else tone(cf, t0 + j * unit, unit * 0.9, 0.13);
+  }
+  return total * unit * 1000;
+}
+
+/* 播放玩家自己的版本；返回时长毫秒，没东西可放时返回 0 */
+function playOwn(room) {
+  var c = ensureAudio();
+  if (!c) return 0;
+  if (room.kind === 'counterpoint') {
+    var lv = LEVELS[room.cp], cp = cpState(room);
+    return playCpOnce(lv, cp.slots);
+  }
+  if (room.kind === 'rhythm') {
+    var rs = rhythmState(room);
+    var dur = playRhythm(room, rs);
+    return dur * 1000;
+  }
+  if (room.kind === 'harmony') {
+    var h = harmonyState(room);
+    if (!h.chosen || !h.chosen.length) return 0;
+    var t0 = c.currentTime + 0.05, i = 0;
+    for (; i < h.chosen.length; i++) playChord(h.chosen[i].pcs, t0 + i * 0.9, 0.8, 0.09);
+    return i * 900;
+  }
+  return 0;
+}
+
+function firstDiffOf(room) {
+  if (room.kind === 'counterpoint') {
+    var r = judge(LEVELS[room.cp], cpState(room).slots);
+    return r.violations.length ? { slot: r.violations[0].slot, label: '第 ' + (r.violations[0].slot + 1) + ' 音 · ' + r.violations[0].code } : null;
+  }
+  if (room.kind === 'rhythm') {
+    var j = judgeRhythm(room, rhythmState(room).bars);
+    return j.first ? { bar: j.first.bar, label: '第 ' + (j.first.bar + 1) + ' 小节 · ' + j.first.code } : null;
+  }
+  if (room.kind === 'harmony') {
+    var h = harmonyState(room);
+    return h.bad ? { rn: h.bad, label: '和弦 ' + h.bad } : null;
+  }
+  return null;
+}
+
+var FAULT_WHAT = {
+  counterpoint: '你刚把这一列的对位音逐格填满了',
+  rhythm: '你刚把这一行的时值块铺满了',
+  harmony: '你刚把这一串和弦选完了',
+  scale: '你刚选好了一组石头、指定了主音',
+  set: '你刚把这组音排了序',
+  pop: '你刚接完这一圈的进行',
+  compass: '你刚走到目标调',
+  form: '你刚把曲式标记排完'
+};
+
+// 先说“你做了什么 / 哪里断了”，再让下面的批注给规则出处
+function faultNarrative(room, diff) {
+  if (!room || !diff) return null;
+  var what = FAULT_WHAT[room.kind] || '你刚提交了这一步';
+  var where = diff.label || '';
+  if (room.kind === 'counterpoint' && Number.isInteger(diff.slot)) {
+    var prev = diff.slot > 0 ? '上一个音和它之间' : '起手这个音';
+    return what + '，断在' + prev + '：' + where.replace(/^第 \d+ 音 · /, '') + '。规则的出处写在下面的批注里。';
+  }
+  if (room.kind === 'rhythm' && Number.isInteger(diff.bar)) {
+    return what + '，断在第 ' + (diff.bar + 1) + ' 小节的时值总和：' + where.replace(/^第 \d+ 小节 · /, '') + '。规则出处见批注。';
+  }
+  return what + '，断在' + where + '。规则出处见下面的批注。';
+}
+
+function playCompare(room) {
+  var plan = referencePlan(room);
+  if (!plan) return;
+  var ms = playOwn(room) || 0;
+  var delay = ms + 480;
+  window.setTimeout(function () { playReference(plan); }, delay);
+}
+
+
+/* ================= 4f. 地图常音 ================= */
+
+var drone = { nodes: null, on: false };
+
+function pendingDistricts(s) {
+  s = s || state;
+  return DISTRICTS.filter(function (d) {
+    return playableRoomsOfDistrict(d.id).length > 0 && !(s.seals && s.seals[d.id]);
+  }).length;
+}
+
+/* 未校完的城区越多，两条同频振荡器的差越大，听起来越"脏" */
+function droneDetuneCents(pending) {
+  return Math.min(16, pending * 2 + 2);
+}
+
+function startDrone() {
+  var c = ensureAudio();
+  if (!c) return false;
+  stopDrone();
+  var pending = pendingDistricts();
+  var g = c.createGain();
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.035, c.currentTime + 0.8);
+  var o1 = c.createOscillator(); o1.type = 'sine'; o1.frequency.value = 110;
+  var o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = 110;
+  o2.detune.value = droneDetuneCents(pending);
+  o1.connect(g); o2.connect(g); g.connect(masterGain || c.destination);
+  o1.start(); o2.start();
+  drone = { nodes: { g: g, o1: o1, o2: o2 }, on: true };
+  return true;
+}
+
+function stopDrone() {
+  if (!drone.nodes) { drone.on = false; return; }
+  var c = actx, n = drone.nodes;
+  try {
+    if (c) {
+      n.g.gain.cancelScheduledValues(c.currentTime);
+      n.g.gain.setValueAtTime(Math.max(n.g.gain.value, 0.0001), c.currentTime);
+      n.g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.25);
+      n.o1.stop(c.currentTime + 0.35);
+      n.o2.stop(c.currentTime + 0.35);
+    }
+  } catch (e) { /* 已停止的节点重复 stop 会抛错，忽略 */ }
+  drone = { nodes: null, on: false };
+}
+
+
+/* ================= 4g. 我的校记页 ================= */
+
+/* 纯数据，便于测试；渲染层再拼 SVG */
+function diplomaFacts(s) {
+  s = s || state;
+  var marks = DISTRICTS.map(function (d) {
+    return { id: d.id, name: DISTRICT_MARK[d.id].name, got: !!(s.seals && s.seals[d.id]) };
+  });
+  var records = DISTRICTS.map(function (d) {
+    var r = s.records && s.records[d.id];
+    return { district: d.name, choice: (r && r.choice) ? r.choice : '未记' };
+  });
+  var total = ROOMS.filter(function (r) { return r.kind !== 'locked'; }).length;
+  var mc = { understand: 0, proficient: 0, transfer: 0 };
+  var cleared = s.cleared || {};
+  ROOMS.forEach(function (r) {
+    if (r.kind === 'locked' || !cleared[r.id]) return;
+    var m = (s.mastery && s.mastery[r.id]) || null;
+    if (m) mc[m]++;
+  });
+  return {
+    name: s.signed || '（留白）',
+    done: Object.keys(s.cleared || {}).length,
+    total: total,
+    mastery: mc,
+    marks: marks,
+    records: records
+  };
+}
+
+function diplomaMarkup() {
+  var facts = diplomaFacts();
+  var av = avatarSVG(avatarOf(), 92).outerHTML;
+  var marks = facts.marks.map(function (m) {
+    var glyph = m.got ? markSVG(m.id, 16).outerHTML : '';
+    return '<span class="d-mark' + (m.got ? ' is-on' : '') + '">' + glyph + '<b>' + m.name + '</b>' + (m.got ? '' : '<i>未获得</i>') + '</span>';
+  }).join('');
+  var records = facts.records.map(function (r) {
+    return '<li>' + r.district + ' · ' + r.choice + '</li>';
+  }).join('');
+  var done = facts.done;
+  var total = facts.total;
+  var name = facts.name;
+  var today = new Date();
+  var date = today.getFullYear() + ' 年 ' + (today.getMonth() + 1) + ' 月 ' + today.getDate() + ' 日';
+
+  return '<div class="diploma-page">' +
+    '<h1>五度环</h1>' +
+    '<div class="d-sub">校记页 · 环城记谱公会</div>' +
+    '<div class="d-head">' + av +
+      '<div><div>本册记谱人</div><div class="d-name">' + name + '</div>' +
+      '<div class="d-sub" style="margin-top:10px">已完成 ' + done + ' / ' + total + ' 页 · ' + date + '</div></div>' +
+    '</div>' +
+    '<div class="d-marks">' + marks + '</div>' +
+    '<div class="d-mastery">掌握 · 理解 ' + facts.mastery.understand + ' · 熟练 ' + facts.mastery.proficient + ' · 迁移 ' + facts.mastery.transfer + '</div>' +
+    '<div class="d-sub">六区校记</div>' +
+    '<ul>' + records + '</ul>' +
+    '<div class="d-foot">规则与固定旋律取自 Open Music Theory（CC BY-SA 4.0），谱面与环城为原创。<br>声音由浏览器 Web Audio 实时合成，本页不含任何音频文件。</div>' +
+  '</div>';
+}
+
+function roomCardFacts(s, id) {
+  s = s || state;
+  var room = ROOM_INDEX[id];
+  if (!room) return null;
+  var rec = s.records && s.records[room.district];
+  return {
+    room: room.title,
+    district: (districtById(room.district) || {}).name || '',
+    mastered: (s.mastery && s.mastery[id]) || null,
+    level: MASTERY_LABEL[(s.mastery && s.mastery[id]) || ''] || '已校',
+    record: (rec && rec.choice) ? rec.choice : '未记',
+    name: s.signed || '（留白）'
+  };
+}
+
+function roomCardMarkup(id) {
+  var f = roomCardFacts(state, id);
+  if (!f) return '';
+  var av = avatarSVG(avatarOf(), 68).outerHTML;
+  return '<div class="diploma-page room-card">' +
+    '<h1>' + f.room + '</h1>' +
+    '<div class="d-sub">' + f.district + ' · 环城记谱公会</div>' +
+    '<div class="d-head">' + av + '<div><div>这一页由</div><div class="d-name">' + f.name + '</div>' +
+    '<div class="d-sub" style="margin-top:8px">掌握 · ' + f.level + '</div></div></div>' +
+    '<div class="d-sub">这一页的校记</div><ul><li>' + f.record + '</li></ul>' +
+    '<div class="d-foot">声音由浏览器实时合成，本页不含音频文件。</div>' +
+  '</div>';
+}
+
+function downloadRoomCard(id) {
+  var html = '<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8">' +
+    '<title>五度环 · ' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : '校记卡') + '</title><style>' +
+    'body{margin:0;background:#fff;color:#211c18;font-family:"Songti SC","Iowan Old Style",Georgia,serif}' +
+    '.diploma-page{max-width:180mm;margin:14mm auto;padding:10mm;border:1px solid #c9b9a4}' +
+    'h1{font-size:20px;margin:0 0 4px}.d-sub{font-size:11px;color:#7a6c5c;letter-spacing:.04em}' +
+    '.d-head{display:flex;gap:12px;align-items:center;margin:12px 0}.d-name{font-size:17px}' +
+    'ul{list-style:none;padding:0;margin:6px 0 0;font-size:12px;line-height:1.9}' +
+    '.d-foot{margin-top:16px;padding-top:8px;border-top:1px solid #c9b9a4;font-size:10px;color:#7a6c5c}' +
+    '</style></head><body>' + roomCardMarkup(id) + '</body></html>';
+  var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '五度环-校记卡-' + (ROOM_INDEX[id] ? ROOM_INDEX[id].title : 'room') + '.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1200);
+}
+
+function renderDiploma() {
+  var host = document.getElementById('diplomaHost');
+  if (host) host.innerHTML = diplomaMarkup();
+}
+
+function printDiploma() {
+  renderDiploma();
+  window.print();
+}
+
+function downloadDiploma() {
+  var html = '<!DOCTYPE html><html lang="zh-Hans"><head><meta charset="utf-8">' +
+    '<title>五度环 · 我的校记页</title><style>' +
+    'body{margin:0;background:#fff;color:#211c18;font-family:"Songti SC","Iowan Old Style",Georgia,serif}' +
+    '.diploma-page{width:180mm;min-height:250mm;margin:0 auto;padding:18mm 16mm}' +
+    '.diploma-page h1{font-size:24px;letter-spacing:.2em;margin:0 0 4px;font-weight:600}' +
+    '.d-sub{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.2em;color:#6f6455;margin-bottom:14px}' +
+    '.d-head{display:flex;gap:16px;align-items:flex-start;border-bottom:1px solid #c9b9a4;padding-bottom:12px;margin-bottom:12px}' +
+    '.d-name{font-size:20px;letter-spacing:.2em;border-bottom:1px solid #a3392a;padding-bottom:3px;display:inline-block;margin-top:6px}' +
+    '.d-marks{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0}' +
+    '.d-mark{display:flex;align-items:center;gap:6px;font-size:12px;color:#9a8b78}' +
+    '.d-mark.is-on{color:#a3392a}.d-mark i{font-style:normal;font-size:10px}' +
+    'ul{list-style:none;padding:0;margin:6px 0 0;font-size:12px;line-height:1.9;color:#3b342c}' +
+    '.d-foot{margin-top:18px;padding-top:8px;border-top:1px solid #c9b9a4;font-size:10px;color:#7a6c5c;line-height:1.7}' +
+    '@page{size:A4;margin:0}' +
+    '</style></head><body>' + diplomaMarkup() + '</body></html>';
+  var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '五度环-校记页.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function roomHasFailure(room) {
+  if (room.kind === 'counterpoint') {
+    var c = cpState(room);
+    return c.attempts > 0 && judge(LEVELS[room.cp], c.slots).violations.length > 0;
+  }
+  if (room.kind === 'scale') { var s = scaleState(room); return !!(s.checked && s.error); }
+  if (room.kind === 'harmony') { var h = harmonyState(room); return !!h.bad; }
+  if (room.kind === 'set') { var t = setState(room); return !!(t.checked && t.error); }
+  if (room.kind === 'pop') { var p = popState(room); return !!p.bad; }
+  if (room.kind === 'rhythm') { var r = rhythmState(room); return !!(r.checked && r.lastError); }
+  if (room.kind === 'form') { var f = formState(room); return !!(f.checked && f.error); }
+  if (room.kind === 'compass') { var cs = compassState(room); return !!(cs.checked && cs.error); }
+  return false;
 }
 
 function tone(midi, when, dur, gain) {
@@ -571,6 +1268,7 @@ function buildScore(level, slots) {
     var cls = 'note-head';
     if (opts.empty) cls += ' is-empty';
     if (opts.bad) cls += ' is-bad';
+    if (opts.diff) cls += ' is-diff';
     if (opts.active) cls += ' is-active';
     var head = svgEl('ellipse', {
       cx: x, cy: y, rx: 5.8, ry: 4.1, class: cls,
@@ -627,6 +1325,7 @@ function buildScore(level, slots) {
       drawNote(x, v, cpClef, cpBottom, {
         empty: false,
         bad: !!marked,
+        diff: !!(state.diff && state.diff.slot === j),
         active: j === state.activeSlot
       });
     }
@@ -699,6 +1398,7 @@ var ROOMS = [
   {
     id: 'r-c-major', district: 'quarry', kind: 'scale', title: '十二块石头',
     meta: '拼音阶 · C 大调', char: '维斯',
+    plain: '石头 = 一个音高。五度环 = 把十二个音按“往上纯五度”的顺序排成一圈，所以环上相邻的两块听起来最贴。这一关不用写谱，只要把七块石头挑出来。',
     line: '先把石头认全。别急着写谱，认不出石头的人写不出站得住的线。',
     teach: {
       title: '七块石头与调号',
@@ -713,18 +1413,30 @@ var ROOMS = [
     target: { tonic: 0, pcs: [0, 2, 4, 5, 7, 9, 11], label: 'C 大调', degrees: ['C', 'D', 'E', 'F', 'G', 'A', 'B'] }
   },
   {
-    id: 'r-meter', district: 'quarry', kind: 'locked', title: '节拍与分组',
-    meta: '只读 · 节拍', char: '维斯',
-    line: '拍子的事归营造司管。我这儿只给你留了一张抄录。',
+    id: 'r-meter', district: 'quarry', kind: 'rhythm',
+    plain: '拍 = 心跳的那一下，小节 = 每几下一个循环。这一关只要把一排格子填到每小节的总时值正好对上。', title: '把桥板铺满',
+    meta: '节奏 · 4/4 单拍子', char: '维斯',
+    line: '拍子归营造司管，可桥得你自己铺。一小节十六个最小单位，一格都不能空。',
     teach: {
-      title: '拍子是两个问题',
+      title: '拍号就是分组',
       body: [
-        '第一个问题是分组：一小组里有几拍，二拍、三拍还是四拍。',
-        '第二个问题是切分：每一拍分成两份还是三份。分成两份叫单拍子，分成三份叫复拍子。',
-        '两个问题乘起来就是拍号的全部内容，指挥的手势也是从这里来的。'
+        '4/4 的 4 说的是每小节四拍，下面的 4 说的是每一拍是四分音符。把一拍再切成四份，一小节就是十六个最小单位。',
+        '单拍子每拍分成两份，复拍子每拍分成三份。分组决定听感上的强弱，和音符长短一样重要。',
+        '桥要通，每小节总时值必须正好等于拍号，而且每一拍上都要有落音，否则分组就塌了。'
       ],
       quote: 'Duple, triple, and quadruple classifications result from the relationship between the counting pulse and the pulses that are slower than the counting pulse. In other words, it is a question of grouping: how many beats occur in each bar.',
       cite: 'meter.md:8'
+    },
+    guide: {
+      goal: '给两小节 4/4 的桥铺上音符或休止，让每小节正好十六个最小单位，并且每一拍都有落音。',
+      steps: ['先点「试听整段」，听一遍四拍的骨架。', '点一个小节选中它，再从素材板挑时值铺上去；铺满会自动跳到下一小节。', '铺错了用「撤销一块」或「清空这一小节」，两小节都满了再呈交。'],
+      done: '两小节各 16 个单位，四个拍点上都有落音。'
+    },
+    rhythm: {
+      meter: '4/4', bars: 2, ticksPerBar: 16, groups: [4, 4, 4, 4],
+      requireOnsets: [0, 4, 8, 12], forbidCrossing: false,
+      palette: [8, 4, 2, 1], allowRests: true,
+      answer: [[{ len: 4 }, { len: 4 }, { len: 4 }, { len: 4 }], [{ len: 4 }, { len: 4 }, { len: 4 }, { len: 4 }]]
     }
   },
   {
@@ -756,6 +1468,32 @@ var ROOMS = [
       ],
       quote: 'In general, all harmonic consonances are allowed.',
       cite: 'firstSpecies.md:41'
+    }
+  },
+  {
+    id: 'r-meter2', district: 'quarry', kind: 'rhythm', title: '复拍子的桥',
+    meta: '节奏 · 6/8 复拍子', char: '维斯',
+    line: '这回是 6/8。一小节分两大组，每组三个八分。先听，再铺。',
+    teach: {
+      title: '复拍子是三分的',
+      body: [
+        '6/8 一小节有六个八分音符，但它们不是六个平等的拍，而是两大组、每组三个。数的时候是 1-2-3、4-5-6。',
+        '所以 6/8 的一拍其实是附点四分音符，占六个最小单位。这一关里，一组就是一块大石头，音符不能横跨两块。',
+        '同样十二个单位，写成 3+3+3+3 是 3/4，写成 6+6 才是 6/8。数字一样，分组不一样，听感完全不同。'
+      ],
+      quote: 'Simple and compound classifications result from the relationship between the counting pulse and the pulses that are faster than the counting pulse. In other words, it is a question of division: does each beat divide into two equal parts, or three equal parts.',
+      cite: 'meter.md:10'
+    },
+    guide: {
+      goal: '给两小节 6/8 的桥铺上时值，每小节正好十二个单位，两组各六个单位处都要有落音，而且不能有音符横跨组界。',
+      steps: ['先点「试听整段」，注意重音是 1-2-3、4-5-6 而不是匀速六下。', '用附点四分或「四分＋八分」把每组铺满，别让一块横跨两组。', '两组都落音、两小节都满十二格时再呈交。'],
+      done: '两小节各 12 个单位，第 1 与第 7 个单位上都有落音，没有音符跨组界。'
+    },
+    rhythm: {
+      meter: '6/8', bars: 2, ticksPerBar: 12, groups: [6, 6],
+      requireOnsets: [0, 6], forbidCrossing: true,
+      palette: [6, 4, 2, 1], allowRests: true,
+      answer: [[{ len: 6 }, { len: 6 }], [{ len: 6 }, { len: 6 }]]
     }
   },
   {
@@ -1295,11 +2033,18 @@ var state = {
   signed: null,
   started: false,
   avatar: null,
+  avatarSeed: null,
   avatarConfirmed: false,
   hintTier: {},
   records: {},
   pendingRecord: null,
-  compass: {}
+  compass: {},
+  rhythm: {},
+  warmupDone: false,
+  mastery: {},
+  evidence: {},
+  tour: null,
+  tourRuns: 0
 };
 
 function totalSlots(level) {
@@ -1319,9 +2064,10 @@ function saveState() {
       cp: state.cp, scale: state.scale, harmony: state.harmony,
       set: state.set, pop: state.pop, form: state.form, cleared: state.cleared,
       seals: state.seals, signed: state.signed, started: state.started,
-      avatar: state.avatar, avatarConfirmed: state.avatarConfirmed,
+      avatar: state.avatar, avatarSeed: state.avatarSeed, avatarConfirmed: state.avatarConfirmed,
       hintTier: state.hintTier, records: state.records,
-      compass: state.compass
+      compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone,
+      mastery: state.mastery, evidence: state.evidence, tour: state.tour, tourRuns: state.tourRuns
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -1331,12 +2077,16 @@ function loadState() {
     var raw = window.localStorage.getItem(STORE_KEY);
     if (!raw) return;
     var d = JSON.parse(raw);
-    ['cp', 'scale', 'harmony', 'set', 'pop', 'form', 'cleared', 'seals', 'hintTier', 'records', 'compass'].forEach(function (k) {
+    ['cp', 'scale', 'harmony', 'set', 'pop', 'form', 'cleared', 'seals', 'hintTier', 'records', 'compass', 'rhythm', 'mastery', 'evidence'].forEach(function (k) {
       if (d[k] && typeof d[k] === 'object') state[k] = d[k];
     });
     if (d.signed) state.signed = d.signed;
     if (d.started) state.started = true;
     if (d.avatar) state.avatar = d.avatar;
+    if (d.warmupDone) state.warmupDone = true;
+    if (d.tour && Array.isArray(d.tour.rooms) && d.tour.rooms.length === 3) state.tour = d.tour;
+    if (Number.isInteger(d.tourRuns)) state.tourRuns = d.tourRuns;
+    if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
     if (d.roomId && ROOM_INDEX[d.roomId]) { state.roomId = d.roomId; state.view = 'room'; }
@@ -1536,8 +2286,9 @@ function renderMap() {
   var totalHost = document.getElementById('sealTotal');
   if (totalHost) totalHost.textContent = String(sealTotal);
 
+  var pendingCount = pendingDistricts();
   var ctext = svgEl('text', { x: 210, y: 204, class: 'city-center' });
-  ctext.textContent = '常音';
+  ctext.textContent = pendingCount ? '常音 · 紧张' : '常音 · 已正';
   svg.appendChild(ctext);
   var csub = svgEl('text', { x: 210, y: 222, class: 'city-center-sub' });
   csub.textContent = state.signed ? '已署名' : '· 仍在响 ·';
@@ -1590,8 +2341,73 @@ function renderMap() {
   });
 
   host.appendChild(svg);
+
+  var audioHost = document.getElementById('cityAudio');
+  if (audioHost) {
+    audioHost.innerHTML = '';
+    var pending2 = pendingDistricts();
+    if (!audioSupported()) {
+      var un = document.createElement('span');
+      un.className = 'city-audio-note';
+      un.textContent = '这个浏览器不支持实时合成，常音只能看文字：' + (pending2 ? '还有 ' + pending2 + ' 区未校。' : '六区都已校完。');
+      audioHost.appendChild(un);
+    } else {
+      var db = document.createElement('button');
+      db.type = 'button';
+      db.className = 'btn btn-quiet btn-mini';
+      db.id = 'droneBtn';
+      db.textContent = drone.on ? '停止常音' : ('听常音 · ' + (pending2 ? pending2 + ' 区未校' : '已正'));
+      db.addEventListener('click', function () {
+        ensureAudio();
+        if (drone.on) stopDrone(); else startDrone();
+        renderMap();
+      });
+      audioHost.appendChild(db);
+      var note = document.createElement('span');
+      note.className = 'city-audio-note';
+      note.textContent = pending2 ? '未校的城区越多，这条音越不干净。' : '六区都校完了，常音已经干净。';
+      audioHost.appendChild(note);
+    }
+  }
+
+  renderTourEntry();
   renderDistrictPanel();
   saveState();
+}
+
+function renderTourEntry() {
+  var host = document.getElementById('tourHost');
+  if (!host) return;
+  host.innerHTML = '';
+  var counts = masteryCounts(state);
+  var owned = counts.understand + counts.proficient + counts.transfer;
+  var line = document.createElement('div');
+  line.className = 'tour-counts';
+  line.textContent = owned
+    ? '掌握：理解 ' + counts.understand + ' · 熟练 ' + counts.proficient + ' · 迁移 ' + counts.transfer
+    : '掌握：还没有记录，校完第一间房就会开始记。';
+  host.appendChild(line);
+
+  var t = state.tour;
+  if (t && t.rooms) {
+    var resume = mkBtn(t.done ? '看巡演总结' : '继续巡演 ' + Math.min(t.index + 1, 3) + '/3', 'btn btn-mini', resumeTour);
+    resume.id = 'tourResume';
+    host.appendChild(resume);
+    var quit = mkBtn('退出巡演', 'btn btn-quiet btn-mini', leaveTour);
+    host.appendChild(quit);
+    return;
+  }
+  var plan = buildTour(state);
+  var btn = mkBtn(plan.ok ? '三关巡演 · 约 5 分钟' : '三关巡演 · 需先校完 3 间', 'btn btn-mini', startTour);
+  btn.id = 'tourStart';
+  btn.disabled = !plan.ok;
+  host.appendChild(btn);
+  if (!plan.ok) {
+    var hint = document.createElement('span');
+    hint.className = 'tour-hint';
+    hint.textContent = '已有 ' + plan.have + ' / 3 间';
+    host.appendChild(hint);
+  }
 }
 
 function renderDistrictPanel() {
@@ -1613,6 +2429,19 @@ function renderDistrictPanel() {
   desc.className = 'dp-desc';
   desc.textContent = d.desc;
   panel.appendChild(desc);
+
+  var dRooms = playableRoomsOfDistrict(d.id).filter(function (r) { return state.cleared[r.id]; });
+  if (dRooms.length) {
+    var dm = { understand: 0, proficient: 0, transfer: 0 };
+    dRooms.forEach(function (r) {
+      var m = masteryOf(state, r.id);
+      if (m) dm[m]++;
+    });
+    var dline = document.createElement('div');
+    dline.className = 'dp-mastery';
+    dline.textContent = '这一区：理解 ' + dm.understand + ' · 熟练 ' + dm.proficient + ' · 迁移 ' + dm.transfer;
+    panel.appendChild(dline);
+  }
 
   var idrow = document.createElement('div');
   idrow.className = 'panel-identity';
@@ -1914,6 +2743,296 @@ function renderCompassRoom(room, body, barUi) {
   barUi.submit(mkBtn('回环城', 'btn', function () { clearRoom(room); }));
 }
 
+/* ================= 15e. 节奏桥梁 ================= */
+
+var TICK_LABEL = { 16: '全', 12: '附点二分', 8: '二分', 6: '附点四分', 4: '四分', 3: '附点八分', 2: '八分', 1: '十六分' };
+
+function rhythmState(room) {
+  if (!state.rhythm[room.id]) {
+    state.rhythm[room.id] = {
+      bars: (function () { var a = []; for (var i = 0; i < room.rhythm.bars; i++) a.push([]); return a; })(),
+      active: 0,
+      listened: false,
+      checked: false,
+      lastError: null
+    };
+  }
+  return state.rhythm[room.id];
+}
+
+function barTicks(room) { return room.rhythm.ticksPerBar; }
+
+function barSum(bar) {
+  var t = 0;
+  for (var i = 0; i < bar.length; i++) t += bar[i].len;
+  return t;
+}
+
+/* 判定：全部用整数刻度，不做浮点累加 */
+function judgeRhythm(room, bars) {
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+  var errors = [];
+  for (var b = 0; b < bars.length; b++) {
+    var bar = bars[b];
+    var sum = barSum(bar);
+    if (sum < per) errors.push({ code: 'INCOMPLETE', bar: b, deficit: per - sum, message: '第 ' + (b + 1) + ' 小节还差 ' + (per - sum) + ' 个最小单位。' });
+    if (sum > per) errors.push({ code: 'OVERFLOW', bar: b, excess: sum - per, message: '第 ' + (b + 1) + ' 小节多了 ' + (sum - per) + ' 个最小单位。' });
+
+    var t = 0, onsets = [];
+    for (var i = 0; i < bar.length; i++) {
+      onsets.push(t);
+      var start = t;
+      t += bar[i].len;
+      if (R.forbidCrossing) {
+        for (var g = 1; g < R.groups.length; g++) {
+          var boundary = 0;
+          for (var k = 0; k < g; k++) boundary += R.groups[k];
+          if (start < boundary && boundary < start + bar[i].len) {
+            errors.push({ code: 'CROSS', bar: b, slot: i, at: boundary, message: '第 ' + (b + 1) + ' 小节第 ' + (i + 1) + ' 块跨过了组界（第 ' + boundary + ' 个最小单位处）。' });
+          }
+        }
+      }
+    }
+    for (var r = 0; r < R.requireOnsets.length; r++) {
+      var need = R.requireOnsets[r];
+      if (onsets.indexOf(need) === -1) {
+        errors.push({ code: 'GROUPING', bar: b, at: need, message: '第 ' + (b + 1) + ' 小节第 ' + (need + 1) + ' 个最小单位上没有落音，分组听不出来。' });
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors: errors, first: errors.length ? errors[0] : null };
+}
+
+function rhythmSubmitCheck(room, st) {
+  var j = judgeRhythm(room, st.bars);
+  if (!st.listened) return { ok: false, code: 'NEED_LISTEN', message: '先点「试听整段」完整听一遍，再呈交。' };
+  if (!j.ok) return { ok: false, code: j.first.code, message: j.first.message };
+  return { ok: true };
+}
+
+/* 播放：遇到第一个断点就停，把问题听出来 */
+function playRhythm(room, st, opts) {
+  opts = opts || {};
+  var c = ensureAudio();
+  if (!c) return 0;
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+  var t0 = c.currentTime + 0.08;
+  var unit = 0.1;
+  var stopBar = opts.stopAtError ? -1 : -2;
+  if (opts.stopAtError) {
+    var j = judgeRhythm(room, st.bars);
+    if (j.first) stopBar = j.first.bar;
+  }
+  var t = 0;
+  for (var b = 0; b < st.bars.length; b++) {
+    if (b === stopBar && opts.stopAtError) break;
+    var bar = st.bars[b];
+    var local = 0;
+    for (var i = 0; i < bar.length; i++) {
+      var p = bar[i];
+      if (!p.rest) {
+        var accent = R.requireOnsets.indexOf(local) !== -1;
+        tone(accent ? 88 : 81, t0 + (t + local) * unit, 0.085, accent ? 0.16 : 0.1);
+      }
+      local += p.len;
+    }
+    t += per;
+  }
+  return t * unit;
+}
+
+function rhythmPlace(room, len, rest) {
+  var st = rhythmState(room);
+  var per = barTicks(room);
+  var b = st.active;
+  var used = barSum(st.bars[b]);
+  if (used + len > per) {
+    st.lastError = '第 ' + (b + 1) + ' 小节只剩 ' + (per - used) + ' 个最小单位，放不下 ' + len + '。先撤销，或换一块小的。';
+    renderRoom();
+    saveState();
+    return;
+  }
+  st.bars[b].push({ len: len, rest: !!rest });
+  st.checked = false;
+  if (barSum(st.bars[b]) === per) {
+    for (var i = 0; i < st.bars.length; i++) {
+      if (barSum(st.bars[i]) < per) { st.active = i; break; }
+    }
+  }
+  st.lastError = null;
+  renderRoom();
+  saveState();
+}
+
+function rhythmUndo(room) {
+  var st = rhythmState(room);
+  st.bars[st.active].pop();
+  st.checked = false;
+  st.lastError = null;
+  renderRoom();
+  saveState();
+}
+
+function rhythmClearBar(room) {
+  var st = rhythmState(room);
+  st.bars[st.active] = [];
+  st.checked = false;
+  st.lastError = null;
+  renderRoom();
+  saveState();
+}
+
+function rhythmSubmit(room) {
+  var st = rhythmState(room);
+  st.checked = true;
+  var r = rhythmSubmitCheck(room, st);
+  if (!r.ok) {
+    st.lastError = r.message;
+    renderRoom();
+    setSubmitMsg(r.message);
+    saveState();
+    return;
+  }
+  playRhythm(room, st, { stopAtError: false });
+  passRoom(room);
+  var total = 0;
+  for (var i = 0; i < st.bars.length; i++) total += barSum(st.bars[i]);
+  setTimeout(function () {
+    showVerdict({
+      eyebrow: '接上了',
+      title: room.title + ' · 桥通了',
+      paras: ['两小节各 ' + barTicks(room) + ' 个最小单位，一共 ' + total + ' 格，一格不多一格不少。'],
+      actions: [{ label: '回环城', cls: 'btn btn-ink', fn: function () { hideVerdict(); clearRoom(room); } }]
+    });
+  }, 700);
+  saveState();
+}
+
+function renderRhythmRoom(room, body, barUi) {
+  var st = rhythmState(room);
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+
+  var host = document.createElement('div');
+  host.className = 'rhythm-host';
+  body.appendChild(host);
+
+  st.bars.forEach(function (bar, bi) {
+    var row = document.createElement('div');
+    row.className = 'rb-row' + (bi === st.active ? ' is-active' : '') +
+      (state.diff && state.diff.bar === bi ? ' is-diff' : '');
+
+    var head = document.createElement('div');
+    head.className = 'rb-head';
+    var name = document.createElement('span');
+    name.textContent = '第 ' + (bi + 1) + ' 小节';
+    var left = document.createElement('span');
+    var used = barSum(bar);
+    var rest = per - used;
+    left.className = 'rb-left' + (rest < 0 ? ' is-over' : rest === 0 ? ' is-full' : '');
+    left.textContent = rest > 0 ? ('还差 ' + rest) : rest === 0 ? '满了' : ('多了 ' + (-rest));
+    head.appendChild(name);
+    head.appendChild(left);
+    row.appendChild(head);
+
+    var track = document.createElement('div');
+    track.className = 'rb-track';
+    track.setAttribute('data-bar', String(bi));
+    track.addEventListener('click', function () {
+      st.active = bi;
+      renderRoom();
+    });
+
+    for (var g = 1; g < R.groups.length; g++) {
+      var boundary = 0;
+      for (var k = 0; k < g; k++) boundary += R.groups[k];
+      var div = document.createElement('span');
+      div.className = 'rb-div';
+      div.style.left = (boundary / per * 100) + '%';
+      track.appendChild(div);
+    }
+
+    if (!bar.length) {
+      var empty = document.createElement('span');
+      empty.className = 'rb-empty';
+      empty.textContent = '空桥';
+      track.appendChild(empty);
+    }
+    bar.forEach(function (p, pi) {
+      var plank = document.createElement('span');
+      plank.className = 'rb-plank' + (p.rest ? ' is-rest' : '');
+      plank.style.width = (p.len / per * 100) + '%';
+      plank.title = (p.rest ? '休止·' : '') + TICK_LABEL[p.len] + '（' + p.len + ' 单位）';
+      plank.textContent = p.rest ? '休' : String(p.len);
+      track.appendChild(plank);
+    });
+    row.appendChild(track);
+    host.appendChild(row);
+  });
+
+  var pal = document.createElement('div');
+  pal.className = 'rhythm-palette';
+  var noteRow = document.createElement('div');
+  noteRow.className = 'rp-row';
+  var noteLabel = document.createElement('span');
+  noteLabel.className = 'rp-label';
+  noteLabel.textContent = '音符';
+  noteRow.appendChild(noteLabel);
+  R.palette.forEach(function (len) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rp-tile';
+    b.textContent = TICK_LABEL[len] + ' ' + len;
+    b.style.minWidth = (34 + len * 4) + 'px';
+    b.addEventListener('click', function () { rhythmPlace(room, len, false); });
+    noteRow.appendChild(b);
+  });
+  pal.appendChild(noteRow);
+
+  if (R.allowRests) {
+    var restRow = document.createElement('div');
+    restRow.className = 'rp-row';
+    var rl = document.createElement('span');
+    rl.className = 'rp-label';
+    rl.textContent = '休止';
+    restRow.appendChild(rl);
+    R.palette.forEach(function (len) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rp-tile is-rest';
+      b.textContent = '休 ' + TICK_LABEL[len] + ' ' + len;
+      b.addEventListener('click', function () { rhythmPlace(room, len, true); });
+      restRow.appendChild(b);
+    });
+    pal.appendChild(restRow);
+  }
+  body.appendChild(pal);
+
+  var hint = document.createElement('div');
+  hint.className = 'ring-hint';
+  var j = judgeRhythm(room, st.bars);
+  hint.textContent = st.lastError ? st.lastError : (j.ok ? '两小节都满了，先听一遍再呈交。' : '点一个小节选中它，再从素材板挑时值铺上去。');
+  body.appendChild(hint);
+
+  var items = [];
+  if (st.checked && st.lastError) items.push({ label: '未通过', message: st.lastError, cls: 'is-bad' });
+  renderMarkList(items, '桥还没铺。');
+
+  barUi.listen(mkBtn('试听整段', 'btn', function () {
+    var s2 = rhythmState(room);
+    s2.listened = true;
+    ensureAudio();
+    playRhythm(room, s2, { stopAtError: false });
+    renderRoom();
+    saveState();
+  }));
+  barUi.task(mkBtn('撤销一块', 'btn', function () { rhythmUndo(room); }));
+  barUi.task(mkBtn('清空这一小节', 'btn btn-quiet', function () { rhythmClearBar(room); }));
+  barUi.submit(mkBtn('呈交乐长', 'btn btn-ink', function () { rhythmSubmit(room); }));
+}
+
 /* ================= 15c. 化身、印记与校记 ================= */
 
 var SKIN = ['#f0d3bb', '#dfae8a', '#b47a54', '#6f4a34'];
@@ -2061,8 +3180,45 @@ function markRow(size) {
 
 var creatorOpen = false;
 
+/* 可复现的伪随机：同一 seed 必得同一化身，便于测试与「换一个」重放。
+   不是密码学随机，只保证组合合法、分布均匀。 */
+function mulberry32(a) {
+  a = a >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomSeed() {
+  return (Math.random() * 4294967296) >>> 0;
+}
+
+function makeAvatar(seed) {
+  var rnd = mulberry32(seed);
+  var pick = function (n) { return Math.floor(rnd() * n) % n; };
+  return {
+    body: pick(3),
+    hair: pick(4),
+    skin: pick(4),
+    cloth: pick(4),
+    seal: pick(6)
+  };
+}
+
 function ensureAvatar() {
-  if (!state.avatar) state.avatar = Object.assign({}, AVATAR_DEFAULT);
+  if (state.avatar) return;
+  if (!Number.isInteger(state.avatarSeed)) state.avatarSeed = randomSeed();
+  state.avatar = makeAvatar(state.avatarSeed);
+  saveState();
+}
+
+function randomizeAvatar() {
+  state.avatarSeed = randomSeed();
+  state.avatar = makeAvatar(state.avatarSeed);
+  saveState();
 }
 
 function renderCreator(host, onDone) {
@@ -2184,12 +3340,14 @@ function focusTarget(room) {
   if (room.kind === 'harmony' || room.kind === 'pop') return '.ledger-options';
   if (room.kind === 'form') return '.form-host';
   if (room.kind === 'compass') return '.compass-ring';
+  if (room.kind === 'rhythm') return '.rhythm-host';
   return null;
 }
 
 function useHint(room) {
   var h = nextHint(room);
   state.hintTier[room.id] = h.tier;
+  noteHintUse(room);
   saveState();
 
   var line = document.getElementById('avatarSay');
@@ -2251,13 +3409,9 @@ function showRecordBeat(did) {
     actions.appendChild(mkBtn(o.key, 'btn', function () {
       state.records[did] = { choice: o.key, finalized: true };
       saveState();
-      if (state.signed) {
-        hideVerdict();
-        renderMap();
-      } else {
-        hideVerdict();
-        renderMap();
-      }
+      hideVerdict();
+      renderMap();
+      if (endingEligible() && !state.signed) setTimeout(showEnding, 320);
     }));
   });
 
@@ -2287,6 +3441,7 @@ function routeOnBoot(s) {
 }
 
 function renderLanding() {
+  stopDrone();
   state.view = 'landing';
   $('viewLanding').hidden = false;
   $('viewMap').hidden = true;
@@ -2304,8 +3459,8 @@ function renderLanding() {
   var avHost = $('landingAvatar');
   if (avHost) {
     avHost.innerHTML = '';
-    if (creatorOpen || !state.avatarConfirmed) {
-      creatorOpen = true;
+    ensureAvatar();
+    if (creatorOpen) {
       renderCreator(avHost, function () { renderLanding(); });
     } else {
       var arow = document.createElement('div');
@@ -2320,15 +3475,25 @@ function renderLanding() {
       sub.className = 'landing-av-sub';
       var got = Object.keys(state.seals || {}).filter(function (k) { return state.seals[k]; }).length;
       sub.textContent = got ? ('已经拿到 ' + got + ' / 6 枚印记') : '还没有印记，先从一个城区开始。';
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'btn btn-quiet';
-      btn.textContent = '改形象';
-      btn.addEventListener('click', function () { creatorOpen = true; renderLanding(); });
       side.appendChild(nm);
       side.appendChild(sub);
       side.appendChild(markRow(16));
-      side.appendChild(btn);
+
+      var avActions = document.createElement('div');
+      avActions.className = 'avatar-actions';
+      var reroll = document.createElement('button');
+      reroll.type = 'button';
+      reroll.className = 'btn btn-mini';
+      reroll.textContent = '换一个随机形象';
+      reroll.addEventListener('click', function () { randomizeAvatar(); renderLanding(); });
+      var edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-mini btn-quiet';
+      edit.textContent = '改形象';
+      edit.addEventListener('click', function () { creatorOpen = true; renderLanding(); });
+      avActions.appendChild(reroll);
+      avActions.appendChild(edit);
+      side.appendChild(avActions);
       arow.appendChild(side);
       avHost.appendChild(arow);
     }
@@ -2366,6 +3531,10 @@ function resetProgress() {
   state.cleared = {};
   state.seals = {};
   state.signed = null;
+  state.avatar = null;
+  state.avatarSeed = null;
+  state.avatarConfirmed = false;
+  state.warmupDone = false;
   state.roomId = null;
   state.district = 'quarry';
   state.started = false;
@@ -2422,7 +3591,12 @@ function enterRoom(id) {
   state.roomId = id;
   state.view = 'room';
   state.district = room.district;
+  if (!(state.tour && state.tour.active)) {
+    state.evidence[id] = { hints: 0, faults: 0 };
+    state._faultFlag = false;
+  }
   renderRoom();
+  if (!state.warmupDone) openWarmup();
   saveState();
 }
 
@@ -2523,6 +3697,7 @@ var MECHANIC_HELP = {
   set: '环上亮着的音是一个集合。正常序要把它转到一个最紧凑的位置；共同音则要找出两组共有的音。两种都以「点环上的石头」为唯一操作。',
   pop: '循环和声按固定顺序转圈。每一步挑循环里的下一个和弦；接错会把循环提前收束，界面会说明断在哪。',
   form: '时间轴上每一段代表若干小节。先听，再给段落贴标签、点出结构点，或在小节线上切分界。三种操作都只靠点击。',
+  rhythm: '桥面按拍号切成最小单位。点一个小节选中它，再点素材板上的时值把桥板铺上去；铺满了会自动跳到下一小节。撤销只退当前小节最后一块，清空只清当前小节。',
   compass: '罗盘就是五度圈，每块石头是一个调号，上面写大调、下面写关系小调。点相邻的石头沿五度走一步，或者用「换关系调」在同一块石头上翻面。每走一步都会先响旧主和弦、再响新主和弦。',
   locked: '这一章只有讲解卡，没有可玩任务。读完要点就算看完。'
 };
@@ -2613,6 +3788,24 @@ function roomProgress(room) {
     return out;
   }
 
+  if (room.kind === 'rhythm') {
+    var rs = rhythmState(room);
+    var perB = barTicks(room);
+    var filled = 0;
+    rs.bars.forEach(function (b) { filled += barSum(b); });
+    var totalB = perB * rs.bars.length;
+    out.progress = '已铺 ' + filled + ' / ' + totalB + ' 个最小单位';
+    if (!rs.listened) out.next = '先点「试听整段」听一遍，再开始铺。';
+    else if (filled < totalB) out.next = '点小节选中它，挑时值铺上去；铺满会自动跳下一小节。';
+    else out.next = '点「呈交乐长」看桥通不通。';
+    var jr = judgeRhythm(room, rs.bars);
+    out.ready = jr.ok && rs.listened;
+    out.hint = !rs.listened
+      ? '还没试听'
+      : (jr.ok ? '可以提交了' : jr.first.message);
+    return out;
+  }
+
   if (room.kind === 'compass') {
     var cp = compassState(room);
     var left = compassDistance({ pc: cp.pc, mode: cp.mode }, room.compass.to);
@@ -2663,6 +3856,13 @@ function buildMission(room, p) {
   goal.className = 'mission-goal';
   goal.textContent = g.goal;
   sec.appendChild(goal);
+
+  if (room.plain) {
+    var plain = document.createElement('p');
+    plain.className = 'mission-plain';
+    plain.textContent = room.plain;
+    sec.appendChild(plain);
+  }
 
   if (g.steps && g.steps.length) {
     var ol = document.createElement('ol');
@@ -2718,6 +3918,7 @@ function buildActionBar(host, p) {
   }
   var listen = group('先听材料');
   var task = group('作答');
+  var compare = group('对照');
   var submit = group('提交验收');
 
   var hint = document.createElement('span');
@@ -2729,9 +3930,11 @@ function buildActionBar(host, p) {
     listen: function (el) { if (el) listen.body.appendChild(el); },
     task: function (el) { if (el) task.body.appendChild(el); },
     submit: function (el) { if (el) submit.body.insertBefore(el, hint); },
+    compare: function (el) { if (el) compare.body.appendChild(el); },
     finish: function () {
       if (!listen.body.children.length) listen.wrap.hidden = true;
       if (!task.body.children.length) task.wrap.hidden = true;
+      if (!compare.body.children.length) compare.wrap.hidden = true;
       if (!submit.body.children.length) submit.wrap.hidden = true;
     }
   };
@@ -2780,6 +3983,7 @@ function openHelp(room) {
 
 function renderRoom() {
   stopFormAnim();
+  stopDrone();
   var room = ROOM_INDEX[state.roomId];
   if (!room) { renderMap(); return; }
   state.view = 'room';
@@ -2810,6 +4014,11 @@ function renderRoom() {
   actions.innerHTML = '';
 
   var p = roomProgress(room);
+  state.diff = roomHasFailure(room) ? firstDiffOf(room) : null;
+  var _fault = !!state.diff;
+  if (_fault && !state._faultFlag) noteFault(room);
+  state._faultFlag = _fault;
+  renderTourBar();
   body.appendChild(buildMission(room, p));
 
   var work = document.createElement('div');
@@ -2825,7 +4034,13 @@ function renderRoom() {
   else if (room.kind === 'pop') renderPopRoom(room, work, bar);
   else if (room.kind === 'form') renderFormRoom(room, work, bar);
   else if (room.kind === 'compass') renderCompassRoom(room, work, bar);
+  else if (room.kind === 'rhythm') renderRhythmRoom(room, work, bar);
   else renderLockedRoom(room, work, bar);
+
+  if (roomHasFailure(room)) {
+    var refPlan = referencePlan(room);
+    if (refPlan) bar.compare(mkBtn('先听你写的，再听修好的', 'btn', function () { playCompare(room); }));
+  }
 
   bar.finish();
   saveState();
@@ -2834,6 +4049,16 @@ function renderRoom() {
 function renderMarkList(items, emptyText) {
   var list = $('markList');
   list.innerHTML = '';
+  if (state.diff && items && items.length && !(items.length === 1 && items[0].label === '第一处不同')) {
+    items = [{ label: '第一处不同', message: state.diff.label }].concat(items);
+  }
+  var narr = state.diff ? faultNarrative(ROOM_INDEX[state.roomId], state.diff) : null;
+  if (narr) {
+    var nl = document.createElement('li');
+    nl.className = 'fault-note';
+    nl.textContent = narr;
+    list.appendChild(nl);
+  }
   if (!items.length) {
     var li = document.createElement('li');
     li.className = 'is-good';
@@ -3213,7 +4438,7 @@ function scaleSubmit(room) {
 /* ---------- 和声 ---------- */
 
 function harmonyState(room) {
-  if (!state.harmony[room.id]) state.harmony[room.id] = { step: 0, attempts: 0, bad: null, lastError: null };
+  if (!state.harmony[room.id]) state.harmony[room.id] = { step: 0, attempts: 0, bad: null, lastError: null, chosen: [] };
   return state.harmony[room.id];
 }
 
@@ -3247,7 +4472,8 @@ function renderHarmonyRoom(room, body, barUi) {
   sit.options.forEach(function (o) {
     var b = document.createElement('button');
     b.type = 'button';
-    b.className = 'chord-opt' + (h.bad === o.rn ? ' is-bad' : '');
+    b.className = 'chord-opt' + (h.bad === o.rn ? ' is-bad' : '') +
+      (state.diff && state.diff.rn === o.rn ? ' is-diff' : '');
     var rn = document.createElement('span');
     rn.className = 'rn';
     rn.textContent = o.rn;
@@ -3289,6 +4515,8 @@ function harmonyChoose(room, opt) {
 
   if (errs.length) {
     h.bad = opt.rn;
+    h.chosen = h.chosen || [];
+    h.chosen.push({ rn: opt.rn, pcs: opt.pcs });
     h.lastError = errs;
     renderRoom();
     saveState();
@@ -4015,18 +5243,295 @@ function showVerdict(o) {
     });
     body.appendChild(ul);
   }
+  if (passLike && state.lastMastery && state.lastMastery.id === state.roomId) {
+    var ml = document.createElement('div');
+    ml.className = 'verdict-mastery';
+    ml.textContent = '掌握 · ' + MASTERY_LABEL[state.lastMastery.level] + '（' + masteryEvidenceText(state.roomId) + '）';
+    body.appendChild(ml);
+  }
   var actions = $('sheetActions');
   actions.innerHTML = '';
   (o.actions || []).forEach(function (a) {
     actions.appendChild(mkBtn(a.label, a.cls || 'btn', a.fn));
   });
+  if (passLike && state.roomId && ROOM_INDEX[state.roomId]) {
+    actions.appendChild(mkBtn('存这张校记卡', 'btn btn-quiet', function () { downloadRoomCard(state.roomId); }));
+  }
+  if (state.tour && state.tour.active) {
+    actions.appendChild(mkBtn(state.tour.done ? '看总结' : '下一关', 'btn', tourAdvance));
+  }
   $('veil').hidden = false;
 }
 
 function hideVerdict() { $('veil').hidden = true; }
 
+
+/* ================= 15z. 掌握度与复习巡演 ================= */
+
+var MASTERY_ORDER = { understand: 1, proficient: 2, transfer: 3 };
+var MASTERY_LABEL = { understand: '理解', proficient: '熟练', transfer: '迁移' };
+var TOUR_SLOT_LABEL = { weak: '薄弱项', proficient: '熟练项', cross: '跨域项' };
+
+function masteryOf(s, id) {
+  s = s || state;
+  return (s.mastery && s.mastery[id]) || null;
+}
+
+function masteryRank(s, id) {
+  return MASTERY_ORDER[masteryOf(s, id)] || 0;
+}
+
+// 三层只升不降；证据来自提示次数与本轮出现过的违规，而不是通关次数
+function masteryAfterPass(prev, ev, inTour) {
+  if (prev === 'transfer') return 'transfer';
+  var clean = !!ev && ev.hints === 0 && ev.faults === 0;
+  if (inTour && clean) return prev === 'proficient' ? 'transfer' : 'proficient';
+  if (clean) return 'proficient';
+  return prev || 'understand';
+}
+
+function masteryCounts(s) {
+  s = s || state;
+  var out = { understand: 0, proficient: 0, transfer: 0, none: 0 };
+  var cleared = s.cleared || {};
+  ROOMS.forEach(function (r) {
+    if (r.kind === 'locked' || !cleared[r.id]) return;
+    var m = masteryOf(s, r.id);
+    out[m || 'none']++;
+  });
+  return out;
+}
+
+function evidenceOf(s, id) {
+  s = s || state;
+  if (!s.evidence) s.evidence = {};
+  if (!s.evidence[id]) s.evidence[id] = { hints: 0, faults: 0 };
+  return s.evidence[id];
+}
+
+function noteHintUse(room) {
+  if (!room) return;
+  if (state.tour && state.tour.active) {
+    if (state.tour.attempt) state.tour.attempt.hints++;
+  } else {
+    evidenceOf(state, room.id).hints++;
+  }
+}
+
+function noteFault(room) {
+  if (!room) return;
+  if (state.tour && state.tour.active) {
+    if (state.tour.attempt) state.tour.attempt.faults++;
+  } else {
+    evidenceOf(state, room.id).faults++;
+  }
+}
+
+function tourCandidates(s) {
+  s = s || state;
+  return ROOMS.filter(function (r) {
+    return r.kind !== 'locked' && !!s.cleared[r.id];
+  });
+}
+
+// 三关组合：一薄弱、一熟练、一跨域。排序确定，按巡演次数轮换起点，不引入未验证的随机题
+function buildTour(s) {
+  s = s || state;
+  var pool = tourCandidates(s);
+  if (pool.length < 3) {
+    return { ok: false, reason: 'insufficient', have: pool.length, need: 3, pool: pool };
+  }
+  var byId = function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; };
+  var ranked = pool.slice().sort(function (a, b) {
+    return masteryRank(s, a.id) - masteryRank(s, b.id) || byId(a, b);
+  });
+  var shift = (s.tourRuns || 0) % ranked.length;
+  ranked = ranked.slice(shift).concat(ranked.slice(0, shift));
+
+  var weak = ranked[0];
+  var rest = ranked.filter(function (r) { return r.id !== weak.id; });
+  var prof = rest.filter(function (r) { return masteryOf(s, r.id) === 'proficient'; })[0] || rest[0];
+  var rest2 = rest.filter(function (r) { return r.id !== prof.id; });
+  var cross = rest2.filter(function (r) { return r.district !== weak.district && r.kind !== weak.kind; })[0]
+    || rest2.filter(function (r) { return r.district !== weak.district; })[0]
+    || rest2[0];
+  if (!weak || !prof || !cross) {
+    return { ok: false, reason: 'insufficient', have: pool.length, need: 3, pool: pool };
+  }
+  return {
+    ok: true,
+    rooms: [weak.id, prof.id, cross.id],
+    slots: ['weak', 'proficient', 'cross'],
+    titles: [weak.title, prof.title, cross.title]
+  };
+}
+
+function tourCurrent() {
+  var t = state.tour;
+  if (!t || !t.active) return null;
+  return ROOM_INDEX[t.rooms[t.index]] || null;
+}
+
+function startTour() {
+  var plan = buildTour(state);
+  if (!plan.ok) {
+    showVerdict({
+      eyebrow: '复习',
+      title: '还不能巡演',
+      paras: ['巡演要有三间已经校过的房才组得起来，你现在有 ' + plan.have + ' 间。',
+        '先把这一区的房间校完，再回来点「三关巡演」。'],
+      actions: [{ label: '知道了', cls: 'btn btn-quiet', fn: hideVerdict }]
+    });
+    return plan;
+  }
+  state.tour = {
+    active: true,
+    index: 0,
+    rooms: plan.rooms,
+    slots: plan.slots,
+    results: [],
+    hintsUsed: 0,
+    faults: 0,
+    before: plan.rooms.map(function (id) { return { id: id, mastery: masteryOf(state, id) }; }),
+    attempt: { hints: 0, faults: 0 }
+  };
+  saveState();
+  enterRoom(plan.rooms[0]);
+  return plan;
+}
+
+function tourPass(room) {
+  var t = state.tour;
+  var ev = t.attempt || { hints: 0, faults: 0 };
+  var before = masteryOf(state, room.id);
+  var after = masteryAfterPass(before, ev, true);
+  if (masteryRank(state, room.id) < MASTERY_ORDER[after]) state.mastery[room.id] = after;
+  t.results.push({ id: room.id, title: room.title, hints: ev.hints, faults: ev.faults, before: before, after: after });
+  t.hintsUsed += ev.hints;
+  t.faults += ev.faults;
+  state.lastMastery = { id: room.id, level: after };
+  if (t.index < 2) {
+    t.index++;
+    t.attempt = { hints: 0, faults: 0 };
+  } else {
+    t.done = true;
+  }
+  saveState();
+}
+
+function tourAdvance() {
+  var t = state.tour;
+  if (!t || !t.active) { renderMap(); return; }
+  hideVerdict();
+  if (t.done) { tourSummary(); return; }
+  var next = ROOM_INDEX[t.rooms[t.index]];
+  if (next) enterRoom(next.id);
+}
+
+function tourSummary() {
+  var t = state.tour;
+  var lines = t.results.map(function (r, i) {
+    var b = r.before ? MASTERY_LABEL[r.before] : '未记录';
+    var arrow = r.before === r.after ? b : b + ' → ' + MASTERY_LABEL[r.after];
+    return '第 ' + (i + 1) + ' 关 ' + r.title + ' ｜ ' + TOUR_SLOT_LABEL[t.slots[i]] + ' ｜ 提示 ' + r.hints + ' 次 ｜ ' + arrow;
+  });
+  var gained = t.results.filter(function (r) { return r.before !== r.after; }).length;
+  var weakest = t.results.slice().sort(function (a, b) {
+    return MASTERY_ORDER[a.after] - MASTERY_ORDER[b.after];
+  })[0];
+  var nextTip = weakest && weakest.after !== 'transfer'
+    ? '下一步建议：再走一次「' + weakest.title + '」，这次不点提示，能把迁移层补上。'
+    : '下一步建议：去地图挑一个还没到迁移的城区，按同样节奏再走三关。';
+  showVerdict({
+    eyebrow: '巡演毕',
+    title: '三关走完',
+    paras: ['提示一共用了 ' + t.hintsUsed + ' 次，掌握变化 ' + gained + ' 处。'],
+    list: lines.concat([nextTip]),
+    actions: [
+      { label: '回地图', cls: 'btn', fn: function () { hideVerdict(); endTour(); renderMap(); } },
+      { label: '再来一轮', cls: 'btn btn-quiet', fn: function () { hideVerdict(); endTour(); startTour(); } }
+    ]
+  });
+}
+
+function endTour() {
+  if (!state.tour) return;
+  state.tourRuns = (state.tourRuns || 0) + 1;
+  state.tour = null;
+  saveState();
+}
+
+function leaveTour() {
+  if (!state.tour || !state.tour.active) return;
+  hideVerdict();
+  state.tour.active = false;
+  saveState();
+  renderMap();
+}
+
+function resumeTour() {
+  var t = state.tour;
+  if (!t || !t.rooms) { startTour(); return; }
+  t.active = true;
+  if (!t.attempt) t.attempt = { hints: 0, faults: 0 };
+  if (t.done) { tourSummary(); return; }
+  enterRoom(t.rooms[t.index]);
+}
+
+function tourBarMarkup() {
+  var t = state.tour;
+  if (!t || !t.active) return null;
+  var cur = tourCurrent();
+  var ev = t.attempt || { hints: 0, faults: 0 };
+  var label = '巡演 ' + (Math.min(t.index + 1, 3)) + '/3';
+  var slot = TOUR_SLOT_LABEL[t.slots[t.index]] || '';
+  var done = t.results.some(function (r) { return cur && r.id === cur.id; });
+  var text = done
+    ? '这一关过了 · 提示 ' + ev.hints + ' 次'
+    : label + ' · ' + slot + (cur ? ' · ' + cur.title : '') + ' · 本关提示 ' + ev.hints + ' 次';
+  return { text: text, done: done, index: t.index };
+}
+
+function masteryEvidenceText(id) {
+  var ev = evidenceOf(state, id);
+  if (!ev.hints && !ev.faults) return '零提示、零违规';
+  var bits = [];
+  if (ev.hints) bits.push('提示 ' + ev.hints + ' 次');
+  if (ev.faults) bits.push('违规 ' + ev.faults + ' 次');
+  return bits.join('、');
+}
+
+function renderTourBar() {
+  var host = document.getElementById('tourBar');
+  if (!host) return;
+  var info = tourBarMarkup();
+  if (!info) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML = '';
+  var label = document.createElement('span');
+  label.className = 'tour-bar-text';
+  label.textContent = info.text;
+  host.appendChild(label);
+  if (info.done) {
+    var go = mkBtn(state.tour.done ? '看总结' : '下一关', 'btn btn-mini', tourAdvance);
+    host.appendChild(go);
+  }
+  var quit = mkBtn('退出巡演', 'btn btn-quiet btn-mini', leaveTour);
+  host.appendChild(quit);
+}
+
 function passRoom(room) {
+  if (state.tour && state.tour.active && state.tour.rooms.indexOf(room.id) !== -1) {
+    state.cleared[room.id] = true;
+    tourPass(room);
+    saveState();
+    return;
+  }
   state.cleared[room.id] = true;
+  state.lastMastery = { id: room.id, level: masteryAfterPass(masteryOf(state, room.id), evidenceOf(state, room.id), false) };
+  if (masteryRank(state, room.id) < MASTERY_ORDER[state.lastMastery.level]) {
+    state.mastery[room.id] = state.lastMastery.level;
+  }
   var pr = playableRoomsOfDistrict(room.district);
   if (pr.length && pr.every(function (r) { return state.cleared[r.id]; })) {
     state.seals[room.district] = true;
@@ -4035,6 +5540,12 @@ function passRoom(room) {
     state.pendingRecord = room.district;
   }
   saveState();
+}
+
+function endingEligible(s) {
+  s = s || state;
+  return DISTRICTS.filter(function (d) { return playableRoomsOfDistrict(d.id).length > 0; })
+    .every(function (d) { return !!(s.seals && s.seals[d.id]); });
 }
 
 function allPlayableCleared() {
@@ -4054,7 +5565,7 @@ function clearRoom(room) {
     setTimeout(function () { showRecordBeat(did); }, 260);
     return;
   }
-  if (allPlayableCleared() && !state.signed) setTimeout(showEnding, 320);
+  if (endingEligible() && !state.signed) setTimeout(showEnding, 320);
 }
 
 function sealBadge(av, size) {
@@ -4130,6 +5641,8 @@ function showEnding() {
     body.appendChild(list2);
     var actions0 = $('sheetActions');
     actions0.innerHTML = '';
+    actions0.appendChild(mkBtn('打印 / 存为 PDF', 'btn', printDiploma));
+    actions0.appendChild(mkBtn('下载校记页', 'btn btn-quiet', downloadDiploma));
     actions0.appendChild(mkBtn('回环城', 'btn btn-ink', function () {
       hideVerdict();
       state.roomId = null;
@@ -4200,6 +5713,7 @@ function showEnding() {
     saveState();
     showEnding();
   }));
+  actions.appendChild(mkBtn('下载校记页', 'btn btn-quiet', downloadDiploma));
 }
 
 /* ================= 18. 启动 ================= */
@@ -4228,6 +5742,19 @@ function bindGlobal() {
     else renderMap();
   });
   $('btnHelpLanding').addEventListener('click', openGeneralHelp);
+  var audioChip = $('audioChip');
+  if (audioChip) audioChip.addEventListener('click', openAudioPanel);
+  var warmDone = $('warmupDone');
+  if (warmDone) warmDone.addEventListener('click', closeWarmup);
+  var warmSkip = $('warmupSkip');
+  if (warmSkip) warmSkip.addEventListener('click', closeWarmup);
+  var audioClose = $('audioClose');
+  if (audioClose) audioClose.addEventListener('click', function () { $('audioVeil').hidden = true; });
+  document.addEventListener('visibilitychange', function () {
+    audioCtl.refresh();
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') stopDrone();
+  });
+  window.addEventListener('pageshow', function () { audioCtl.refresh(); });
   $('btnHint').addEventListener('click', function () {
     var room = ROOM_INDEX[state.roomId];
     if (room) useHint(room);
@@ -4276,7 +5803,9 @@ function bindGlobal() {
 
 function boot() {
   loadState();
+  audioCtl.init();
   bindGlobal();
+  renderAudioChip();
   var route = routeOnBoot(state);
   if (route === 'room') renderRoom();
   else if (route === 'map') renderMap();
@@ -4297,6 +5826,18 @@ if (typeof module !== 'undefined' && module.exports) {
     GUIDES: GUIDES, MECHANIC_HELP: MECHANIC_HELP, guideFor: guideFor,
     hasSave: hasSave, ctaLabel: ctaLabel, routeOnBoot: routeOnBoot,
     nextRecommended: nextRecommended, DISTRICT_MARK: DISTRICT_MARK,
+    makeAvatar: makeAvatar, mulberry32: mulberry32, randomSeed: randomSeed,
+    judgeRhythm: judgeRhythm, rhythmSubmitCheck: rhythmSubmitCheck, barSum: barSum,
+    barTicks: barTicks, endingEligible: endingEligible, TICK_LABEL: TICK_LABEL,
+    createAudioController: createAudioController, audioDiagText: audioDiagText,
+    referencePlan: referencePlan, playReference: playReference, roomHasFailure: roomHasFailure,
+    masteryAfterPass: masteryAfterPass, masteryCounts: masteryCounts, masteryOf: masteryOf,
+    buildTour: buildTour, tourCurrent: tourCurrent, tourSummary: tourSummary,
+    masteryEvidenceText: masteryEvidenceText, noteHintUse: noteHintUse, noteFault: noteFault,
+    faultNarrative: faultNarrative, roomCardFacts: roomCardFacts, roomCardMarkup: roomCardMarkup,
+    firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
+    pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
+    diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,
     compassDistance: compassDistance, compassNeighbors: compassNeighbors, compassKeyOf: compassKeyOf,
     AVATAR_DEFAULT: AVATAR_DEFAULT
   };

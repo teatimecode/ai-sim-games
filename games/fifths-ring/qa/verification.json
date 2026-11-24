@@ -3,10 +3,10 @@
   "source": "openmusictheory/openmusictheory.github.io",
   "builtAt": "2026-11-13",
   "runtime": "静态页面，python3 -m http.server 于沙箱预览会话内运行",
-  "scope": "6 城区、24 房间；15 个可玩、9 个仅讲解",
+  "scope": "6 城区、27 房间；19 个可玩、8 个仅讲解",
   "automated": {
     "command": "node tests/check.js",
-    "result": "passed: 490  failed: 0",
+    "result": "passed: 607  failed: 0",
     "covers": [
       "房间与教程卡完整性（每间都有标题、要点、原文引用与出处）",
       "对位四关回溯求解均有解，示范解法与判定一致",
@@ -24,7 +24,12 @@
       "全局 [hidden] 规则存在，空按钮组与清除确认不会被组件的 display 规则顶出来",
       "调性罗盘：最短步数、对称性、关系调相邻与两个房间存在",
       "推荐下一关：当前城区优先、跳过已校、跨城区、全清返回空",
-      "六枚印记与城区一一对应；化身定制五组选项；三档提示与四选校记的源码守卫"
+      "六枚印记与城区一一对应；化身定制五组选项；三档提示与四选校记的源码守卫",
+      "随机化身：同种子同形象、五个维度都在合法区间、500 个种子全部合法且有多样性、定制不再拦首次进入",
+      "节奏桥梁：时值算术、未填满/溢出/跨组界/缺落音四类错误、等价解、试听门禁",
+      "结局资格改为六区印记齐，旧存档不因新增房间被撤销",
+      "音频状态机：不支持、初始待手势、resume 成功/拒绝、构造异常、statechange 到 suspended/interrupted/closed、重复解锁只建一个上下文",
+      "首胜与对照：每间房都有参考解计划、节奏答案合法、试音只弹一次、失败后才出现对照按钮、触控目标 44px"
     ],
     "log": "qa/test-run.log",
     "runAt": "2026-11-13T04:16:37Z",
@@ -113,14 +118,29 @@
     "renderCreator 把宿主元素的 class 覆盖成 creator，容器一直带边框；改为内部包一层。",
     "批量改写的 replace 把 host.appendChild(box) 改成了 box.appendChild(box)，导致定制面板整块不渲染；已修正。",
     "「体态」三个色块只设背景没写文字，显示为空；改为颜色与文字分开判断，符号项直接画小印。",
-    "调性罗盘的分发分支漏加，房间落到「仅讲解」；补上 kind === compass。"
+    "调性罗盘的分发分支漏加，房间落到「仅讲解」；补上 kind === compass。",
+    "首次进入被定制面板挡住：改为自动生成随机化身并直接显示身份卡，定制降为次要入口。",
+    "avatarConfirmed 不再作为进入条件，旧存档不会被重新挡回定制页。",
+    "节奏房提交提示只看「是否铺满」，两小节都满但跨组界时仍显示可以提交；改为以判定结果为准。",
+    "最后一个城区选完校记后直接回地图，终局不再触发；校记选择后补一次结局检查。",
+    "音频改造后补跑 19 间全量回归，确认统一发声门没有打断任何房间的播放与结算。",
+    "首次进入没有任何可听可点的东西：加试音浮层，30 秒内出声且不判定。",
+    "失败后听不到\"对的样子\"：加对照试听，按房间类型播放标准答案。",
+    "移动端触控目标偏小（约 30–32px）：统一抬到 44px，768 宽无溢出。",
+    "对照听只有参考解、没有玩家版本：改为先放玩家版本再放标准答案，并标出第一处差异。",
+    "地图常音只是两个字：改为可点击的实时常音，未校城区越多差频越大，离开地图即停。",
+    "终页无法带走：新增打印与下载校记页，纯本地生成。"
   ],
   "notVerified": [
     "音色与音量平衡未经人耳复核，仅有信号级证据（峰值 0.155、RMS 0.049，非静音）。",
     "曲式的段落可辨性依赖听觉判断，本次只验证了判定与交互，没有验证「听得出调性转移」。",
     "未做触屏手势与移动端横屏测试。",
     "加兰特图式与诗文分析仍是仅讲解，不在可玩范围。",
-    "化身与提示只做了 1280 与 768 两档检查，未做触屏手势。"
+    "化身与提示只做了 1280 与 768 两档检查，未做触屏手势。",
+    "随机化身的观感与文案仍需人工判断；测试只验证合法性与可复现性。",
+    "节奏房的听感（打击音色是否好辨、断点是否听得出来）未人耳验证，只有信号级证据。",
+    "真实移动浏览器（iOS Safari / Android Chrome）未测；桌面 headless 只证明状态机与信号调度。",
+    "校记页的打印分页在真机打印机上未验证；只在浏览器打印预览层验证。"
   ],
   "ruleCoverage": {
     "engine": "judge / harmonyIssues / orderFrom / minSpanOf / commonTonesOf / formJudge 均为纯函数，可在 node 内复算",
@@ -184,101 +204,106 @@
     }
   ],
   "matrix": {
-    "method": "浏览器内脚本按每间的标准答案逐间操作并提交，读取判定标题与存档 cleared 后记录；15 间顺序执行，最后触发终页并完成署名。",
-    "result": "15 / 15 通过",
+    "method": "浏览器内脚本按每间标准答案逐间操作并提交，读判定与存档 cleared；19 间顺序执行。",
+    "result": "19 / 19 cleared，六区 seals 全 true",
     "rooms": [
       {
         "room": "r-c-major",
-        "title": "十二块石头 · C 大调",
-        "verdict": "校毕",
+        "kind": "scale",
+        "cleared": true
+      },
+      {
+        "room": "r-meter",
+        "kind": "rhythm",
         "cleared": true
       },
       {
         "room": "r-g-major",
-        "title": "升号从哪来 · G 大调",
-        "verdict": "校毕",
+        "kind": "scale",
+        "cleared": true
+      },
+      {
+        "room": "r-meter2",
+        "kind": "rhythm",
         "cleared": true
       },
       {
         "room": "r-d-dorian",
-        "title": "同一组石头，两种城 · d 多利亚",
-        "verdict": "校毕",
+        "kind": "scale",
         "cleared": true
       },
       {
         "room": "r-cp1",
-        "title": "一对一开始 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-cp2",
-        "title": "小调与导音 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-cp3",
-        "title": "写在下方 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-cp4",
-        "title": "二对一 · 无瑕",
-        "verdict": "校毕",
+        "kind": "counterpoint",
         "cleared": true
       },
       {
         "room": "r-func",
-        "title": "功能的方向 · 已平",
-        "verdict": "账平",
+        "kind": "harmony",
         "cleared": true
       },
       {
         "room": "r-debt",
-        "title": "欠账必还 · 已平",
-        "verdict": "账平",
+        "kind": "harmony",
+        "cleared": true
+      },
+      {
+        "room": "r-compass1",
+        "kind": "compass",
+        "cleared": true
+      },
+      {
+        "room": "r-compass2",
+        "kind": "compass",
         "cleared": true
       },
       {
         "room": "r-theme",
-        "title": "主题的两半 · 蓝图对上了",
-        "verdict": "校毕",
+        "kind": "form",
         "cleared": true
       },
       {
         "room": "r-sonata",
-        "title": "呈示部的两个调 · 蓝图对上了",
-        "verdict": "校毕",
+        "kind": "form",
         "cleared": true
       },
       {
         "room": "r-rondo",
-        "title": "叠句回来了几次 · 蓝图对上了",
-        "verdict": "校毕",
+        "kind": "form",
         "cleared": true
       },
       {
         "room": "r-normal",
-        "title": "最紧排列 · 跨度 8",
-        "verdict": "测毕",
+        "kind": "set",
         "cleared": true
       },
       {
         "room": "r-common",
-        "title": "共同音 · 共同音 2 个",
-        "verdict": "测毕",
+        "kind": "set",
         "cleared": true
       },
       {
         "room": "r-doowop",
-        "title": "循环续写 · 一圈",
-        "verdict": "接上了",
+        "kind": "pop",
         "cleared": true
       }
     ],
-    "ending": "全部通过后 cleared=15、六个城区 seals 全为 true，终页出现并带署名输入框；签名后 signed 写入。"
+    "note": "个别关卡结算后紧跟城区「校记」弹层，日志里该条记录的标题取到了校记而非房间标题；存档 cleared 仍为 true，房间本身已通关。"
   },
   "viewport": {
     "checked": [
@@ -514,6 +539,33 @@
           "bust": "visible"
         }
       ]
+    },
+    {
+      "page": "random avatar landing",
+      "results": [
+        {
+          "w": 1024,
+          "h": 768,
+          "overflow": 0
+        },
+        {
+          "w": 768,
+          "h": 1024,
+          "overflow": 0
+        }
+      ]
+    },
+    {
+      "page": "rhythm @768",
+      "results": [
+        {
+          "w": 768,
+          "h": 1024,
+          "overflow": 0,
+          "track": 662,
+          "submitVisible": true
+        }
+      ]
     }
   ],
   "avatar": {
@@ -560,5 +612,400 @@
   "ending": {
     "personalised": "终页显示化身、个人符号印章、六枚印记、六个城区的校记选择，以及姓名输入与「留白」按钮；留白写入「（留白）」。",
     "regression": "原有结局文案保留；署名后仍可回环城。"
+  },
+  "avatarRandom": {
+    "rule": "首次进入按存档种子生成（makeAvatar(seed)，mulberry32 伪随机），刷新与继续保持同一形象；换一个随机形象只换种子；清除进度后重新生成。",
+    "evidence": [
+      "空存档首次进入：自动生成 seed=3567949817 的形象，身份卡直接显示，定制面板未展开，CTA 为「开始旅程」",
+      "刷新后：avatar 与 seed 与刷新前逐字一致（sessionStorage 对照）",
+      "点「换一个随机形象」：seed 变化、形象变化，进度不受影响",
+      "点「改形象」：展开五组选项，主 CTA 仍在",
+      "旧存档（有 avatar、avatarConfirmed=true、无 seed）：形象原样保留，不展开定制，可正常开始",
+      "清除进度：形象与种子重置并生成新形象，cleared=0"
+    ],
+    "randomness": "mulberry32 + 32 位种子，可复现；不声称密码学随机。测试用固定种子验证确定性与取值范围。"
+  },
+  "rhythm": {
+    "rooms": [
+      "把桥板铺满（4/4，16 刻度，每拍落音）",
+      "复拍子的桥（6/8，12 刻度，两组各 6，不得跨组界）"
+    ],
+    "verb": "铺：点小节选中，点素材板上的时值铺上去；撤销/清空只作用于当前小节",
+    "judge": "整数刻度，顺序为 未填满 → 溢出 → 跨组界 → 分组缺落音，错误带小节号与位置",
+    "evidence": [
+      "未填满：第 1 小节三块四分后呈交，提示「第 1 小节还差 4 个最小单位。」",
+      "溢出：第 1 小节已有 12 时放二分，拒绝并提示「只剩 4 个最小单位，放不下 8」",
+      "分组错：铺 8+4+4 总数 16，提示「第 1 小节第 5 个最小单位上没有落音」",
+      "跨组界：6/8 铺 4+4+4，提示「第 1 小节第 2 块跨过了组界（第 6 个最小单位处）」",
+      "试听门禁：铺满但未试听时呈交，提示「先点「试听整段」完整听一遍」",
+      "成功：4/4 八块四分通过；6/8 两组附点四分通过，弹「桥通了」",
+      "等价解：单元测试覆盖 4/4 的 2+2+4+4+4 与 6/8 的 4+2+6"
+    ],
+    "audio": "试听时探针计数 32 个振荡器，AudioContext 为 running；人耳听感未验证"
+  },
+  "saveMigration": {
+    "decision": "印记粘性：新增房间不撤销已有印记；终局资格改为「六个城区都有印记」",
+    "implementation": "endingEligible(state) 只看 seals；passRoom 仍按城区全清发印记",
+    "test": "endingEligible 覆盖全齐/缺一/旧档 cleared 为空三种情况"
+  },
+  "audio": {
+    "synthesis": "全部声音由 Web Audio 实时合成；静态扫描确认 index.html 与 game.js 无 <audio>、无 mp3/wav/ogg 引用、无音频 fetch；浏览器网络记录只有 html/css/js。",
+    "states": [
+      "undetected",
+      "needs-gesture",
+      "starting",
+      "ready",
+      "suspended",
+      "unsupported",
+      "failed"
+    ],
+    "gate": "所有发声入口统一走 ensureAudio() → audioCtl.unlock()，只创建一个 AudioContext；首次点击即调度并发声",
+    "evidence": [
+      "初始 chip「声音·待启用」，aria-live 播报「声音状态：待启用」",
+      "诊断面板显示 Web Audio 支持、上下文未创建、创建次数 0、最近错误无",
+      "点「启用声音」→ 状态变「声音·可用」，上下文 running，创建次数 1",
+      "点「测试声音」→ 记录测试时间，出现「我听到了 / 没听到」",
+      "选「没听到」→ 显示 5 条手机端排查建议",
+      "点「复制诊断」→ 剪贴板被拒时回退为可选文本框，内容无 UA、无存档",
+      "全新页面首次点「试听这组石」→ 28 个振荡器，上下文 running，无需第二次点击",
+      "768/1024/1280 横向溢出均为 0，诊断面板在视口内"
+    ],
+    "mobile": "真实手机未测，标为未验证",
+    "suspendResume": {
+      "evidence": [
+        "主动 ctx.suspend() 后，chip 由「声音·可用」变为「声音·已暂停」（statechange 生效）",
+        "随后点「试听这组石」：上下文恢复为 running，产生 28 个振荡器，chip 回到「声音·可用」",
+        "未做任何自动播放；恢复只由这次点击触发"
+      ]
+    }
+  },
+  "matrixAfterAudio": {
+    "when": "音频改造提交 8d1b83d 之后",
+    "method": "浏览器脚本按标准答案逐间操作并提交，读存档 cleared；19 间顺序执行，最后走完校记并触发终局。",
+    "result": "19 / 19 cleared，六区 seals 全 true，终页显示 6 枚印记与 6 条校记",
+    "kinds": [
+      "scale×3",
+      "rhythm×2",
+      "counterpoint×4",
+      "harmony×2",
+      "compass×2",
+      "form×3",
+      "set×2",
+      "pop×1"
+    ],
+    "note": "个别条目在城区校记弹层时取到校记标题，属取数时机；cleared 均为真。"
+  },
+  "p0Upgrade": {
+    "warmup": {
+      "rule": "第一次进入任何房间时弹出试音浮层，12 块石头随便点、只发声不判定；点「记下了」或「跳过」关闭，之后不再出现，清除进度后重置。",
+      "evidence": [
+        "首次进房弹出，12 个环节点",
+        "点一块石头产生 8 个振荡器（两个音×四个泛音）",
+        "提示依次变为「再点几块，听听它们合不合」「这就是常音」",
+        "关闭后 warmupDone=true，进第二间房不再弹"
+      ],
+      "cost": "无新增房间，房间计数与印记逻辑不变"
+    },
+    "compare": {
+      "rule": "任何房间判定失败后，动作区出现「听修好的版本」，播放该类房间的标准答案。",
+      "evidence": [
+        "对位房 9 处违例的失败态下按钮出现",
+        "点击后调度 120 个振荡器，上下文 running",
+        "标准答案计划覆盖全部 19 间可玩房（单元测试）"
+      ],
+      "kinds": "对位用参考解、拼音阶用目标音阶、和声用合法和弦序列、音集用最小跨度或交集、市集用循环、节奏用答案桥、罗盘用目标主和弦、曲式重放全曲"
+    },
+    "touch": {
+      "rule": "所有可点元素最小高度 44px，节奏桥面 44px。",
+      "evidence": [
+        "768 宽实测：动作按钮 44×141、音高按钮 52×44、桥面 44",
+        "横向溢出 0"
+      ]
+    }
+  },
+  "abC": {
+    "A_compare": {
+      "rule": "失败后按钮改为「先听你写的，再听修好的」：先放玩家版本，间隔 0.48 秒后放标准答案；页边与谱面标出第一处差异。",
+      "evidence": [
+        "对位房 9 处违例：出现 1 个 is-diff 符头，页边首行「第一处不同 第 9 音 · FS-CAD」",
+        "点击后先产生 80 个振荡器（玩家版本），约 6.5 秒后增至 200（接入参考解）",
+        "节奏房标第一处出错小节，和声房标第一个错误和弦",
+        "对照按钮只在 roomHasFailure 为真时出现，提交前不出现"
+      ],
+      "scope": "对位 / 节奏 / 和声已覆盖；其余房间沿用统一参考解播放",
+      "refresh": "以失败态存档重载后，对照按钮、首差符头与「第一处不同」行均恢复"
+    },
+    "B_drone": {
+      "rule": "地图常音用两个同频振荡器，未校城区越多差频越大；只在用户点击后发声，离开地图或页面隐藏即停；不支持 Web Audio 时只显示文字。",
+      "evidence": [
+        "地图按钮文案「听常音 · 6 区未校」，中心写「常音 · 紧张」",
+        "点击后新增 2 个振荡器，按钮变「停止常音」，再点停止",
+        "进房间后再回地图，按钮回到「听常音」，说明离开地图已停",
+        "未校完提示「未校的城区越多，这条音越不干净」；六区全清后文案改为已正"
+      ],
+      "singleContext": "复用 ensureAudio 的同一个 AudioContext，未新建",
+      "stateMatrix": [
+        {
+          "unsealed": 6,
+          "button": "听常音 · 6 区未校",
+          "center": "常音 · 紧张",
+          "detuneCents": 14
+        },
+        {
+          "unsealed": 4,
+          "button": "听常音 · 4 区未校",
+          "center": "常音 · 紧张",
+          "detuneCents": 10
+        },
+        {
+          "unsealed": 0,
+          "button": "听常音 · 已正",
+          "center": "常音 · 已正",
+          "detuneCents": 2,
+          "note": "六区都校完了，常音已经干净。"
+        }
+      ],
+      "leak": "连续开停 3 次只创建 6 个振荡器（每次 2 个），停止后 800ms 内新增 0 个",
+      "unsupported": "模拟不支持：按钮消失，仅显示文字「这个浏览器不支持实时合成，常音只能看文字：六区都已校完。」"
+    },
+    "C_diploma": {
+      "rule": "终页增加「打印 / 存为 PDF」与「下载校记页」，内容含化身、六枚印记、六条校记、姓名或留白、完成数；纯本地 Blob，不联网。",
+      "evidence": [
+        "终页按钮：署上 / 留白 / 下载校记页",
+        "渲染出的校记页 3144 字符，含化身 SVG、六枚印记、六条校记、「已完成 19 / 19 页」",
+        "无 http 链接、无 Mozilla UA 字符串",
+        "打印时隐藏应用外壳，只留 A4 单页"
+      ],
+      "narrow": "768 宽下校记页宽 680px、右边界 724px，无横向溢出"
+    }
+  },
+  "mobileHuman": {
+    "claim": "用户在真实手机端复测确认「目前有声音」。",
+    "scope": "一次人工确认，设备型号与系统版本未知；未覆盖 iOS/Android 全量组合、蓝牙输出、静音开关等场景。",
+    "status": "人工证据，不作为所有设备兼容的结论"
+  },
+  "matrixAfterABC": {
+    "method": "浏览器脚本按标准答案逐间通关，含试音浮层关闭步骤。",
+    "result": "19 / 19 cleared，六区 seals 全 true",
+    "note": "个别条目在城区校记弹层时取到校记标题，cleared 均为真。"
+  },
+  "regressionAfterABC": "落地页、随机化身、清除二次确认、试音重置均通过：清除后 cleared=0、形象重新生成、warmupDone 复位、CTA 回到「开始旅程」",
+  "masteryTour": {
+    "mastery_transitions": [
+      "clean main pass -> proficient",
+      "hinted/faulted pass -> understand",
+      "tour clean from proficient -> transfer",
+      "tour clean from understand -> proficient（一次最多升一层）",
+      "transfer 不回退"
+    ],
+    "tourGeneration": {
+      "insufficient": "2 间已校 -> 空态，按钮禁用，显示「已有 2 / 3 间」",
+      "sufficient": "弱项 r-c-major / 熟练 r-cp1 / 跨域 r-normal（不同城区且不同玩法）",
+      "deterministic": "同一存档两次生成完全一致",
+      "variation": "tourRuns+1 只改变起点，仍全部来自已校房"
+    },
+    "tourFlow": "进入第二关后退出 -> 地图显示「继续巡演 2/3」；刷新后仍可继续；恢复后进入第 2 关",
+    "tourSummary": "提示总数、三关掌握变化、下一步建议；不调用音频接口",
+    "regression19": "19 间房全部走通：cleared 19、seals 6、endingEligible true、掌握记录 19、校记页 19/19",
+    "realPass": "C 大调房真实点选 7 块石头并定主音，呈交后 cleared=true、掌握=熟练、结算显示「掌握 · 熟练（零提示、零违规）」",
+    "viewports": {
+      "768": "溢出 0，巡演条右边界 726",
+      "1280": "溢出 0，动作按钮均 ≥44"
+    },
+    "notVerified": [
+      "巡演手感（三关节奏是否合适）未真人评估",
+      "移动端巡演按钮触感未测"
+    ]
+  },
+  "affinity": {
+    "plainGloss": "r-c-major 与 r-meter 任务卡显示白话解释（石头=音高、拍/小节），其余房间不变",
+    "faultNarrative": "对位房失败态第一条批注为「你刚把这一列的对位音逐格填满了，断在上一个音和它之间：FS-CAD。规则的出处写在下面的批注里。」",
+    "roomCard": "通关后「存这张校记卡」导出单页 HTML：化身 SVG、房名、城区、掌握、校记、署名；1320 字符，无外链",
+    "roomSweep": "27 间房逐间打开无异常，浏览器控制台 0 条日志",
+    "notVerified": [
+      "校记卡在真机上下载后打开的效果未看",
+      "白话解释是否真的降低理解成本未做真人对照"
+    ]
+  },
+  "acceptanceEvidence2026_11_23": {
+    "scope": "按用户要求关闭证据缺口，不扩充房间与知识",
+    "inventory": {
+      "total": 27,
+      "playable": 19,
+      "lectureOnly": 8,
+      "source": "app/game.js ROOMS",
+      "conflictResolution": "15 为早期任务卡口径、24 为加节奏桥前旧数，均已在 design/ROOM_INVENTORY.md 标注为历史"
+    },
+    "A_confirmed": [
+      "r-c-major：清空存档后从地图点进，故意选错七块石→提交→读到「这七块石不对，本关应当是 C D E F G A B」→点选正确七块并定主音→提交→cleared=true，掌握=熟练",
+      "r-g-major：错误提交→「本关应当是 G A B C D E F♯」→改正→cleared=true，掌握=熟练",
+      "r-d-dorian：修正驱动脚本后按 target.tonic 定主音→cleared=true，掌握=熟练",
+      "r-cp1：满格错音提交→读到「你刚把这一列的对位音逐格填满了，断在上一个音和它之间：FS-CAD」→第二次提交后点「看乐长的示范」→提交→cleared=true，掌握=理解（用了提示）",
+      "房间口径：27/19/8 与代码一致，15 与 24 已在清单文档中标为历史"
+    ],
+    "B_pipelineOnly": [
+      "其余 15 间可玩房：本轮只验证到打开与渲染，未用真实点击完成闭环；cleared 由上一轮 passRoom 管线回归覆盖（19/19）",
+      "巡演与掌握度：入口、三关生成、退出恢复、状态转换已在上一轮浏览器验证；本轮未重复",
+      "存档恢复：往轮已验证；本轮未重跑"
+    ],
+    "C_unverified": [
+      "15 间可玩房的真实点击闭环",
+      "360/390/412 真实移动宽度触控（本轮仅有 768/1024/1280 桌面视口）",
+      "人耳听检（对位/和声/节奏/曲式/常音）——本轮没有真人听辨，未做任何听感结论",
+      "校记卡下载文件在磁盘上重新打开（只验证了生成与下载调用不报错）"
+    ],
+    "methodDisclosure": "浏览器内用 dispatchEvent 派发 click 到真实控件，走真实事件处理器与判定；不是指针输入，也不是直接调用 passRoom 或写 localStorage",
+    "testRun": "node tests/check.js → 661 passed / 0 failed"
+  },
+  "pointerEvidence2026_11_23": {
+    "attemptDate": "2026-11-23",
+    "tool": "browser_click（真实指针点击）",
+    "result": "blocked",
+    "detail": "该会话内 browser_click 对 #btnStart/#btnBackMap/[data-pc] 全部返回 502 sandbox_internal_error，连普通按钮也无法点击；页面本身正常（evaluate 可用、导航可用）",
+    "consequence": "19 间真实指针闭环无法在本轮完成，按约定标 C，不写成 completed",
+    "A_confirmed": [
+      "落地页→开始旅程→地图节点→进入 r-c-major 的路径由真实点击触发成功（点击后 state.view=room, roomId=r-c-major）",
+      "校记卡字节：qa/evidence/room-card-r-c-major.html，2065 字节，sha256 efd9c377937248d50fa839e2e0b933f64400e4566dc66343bc85b60637be273a，UTF-8 中文可读，含 Avatar SVG、房名、城区、掌握、校记、署名，无外链",
+      "巡演与掌握度真实存在：startTour/buildTour/tourAdvance/leaveTour/resumeTour/masteryAfterPass 均为可调用函数，地图有 #tourStart 与掌握汇总",
+      "存档键包含 cleared/seals/records/signed/mastery/evidence/tour/tourRuns"
+    ],
+    "B_statePipeline": [
+      "19 间通关管线（passRoom）与 661 条断言",
+      "掌握度三档与巡演流程（上一轮浏览器验证）"
+    ],
+    "C_unverified": [
+      "19 间真实点击闭环（本轮被工具 502 阻塞）",
+      "360/390/412 真实移动设备触控（本轮只有桌面视口 resize，不冒充手机）",
+      "五项人耳听检",
+      "校记卡在浏览器中重新打开的可视渲染（只校验了文件字节）",
+      "存档刷新/退出恢复的本轮抽样（沿用往轮与此前记录）"
+    ]
+  },
+  "pointerDiagnosis2026_11_24": {
+    "sandboxEndpoints": [
+      "2026-11-23: 10.84.121.167（全量 502）",
+      "2026-11-24: 10.84.121.174（部分恢复）"
+    ],
+    "minimalRepro": [
+      {
+        "target": "#btnStart",
+        "result": "ok",
+        "note": "落地页按钮，真实指针点击成功，view=map"
+      },
+      {
+        "target": "g[data-district=\"quarry\"]",
+        "result": "ok",
+        "note": "SVG 城区节点成功"
+      },
+      {
+        "target": "#districtPanel .room-list li:nth-child(1) button",
+        "result": "ok",
+        "note": "进入 r-c-major 成功"
+      },
+      {
+        "target": "[data-pc=\"1\"]",
+        "result": "502 sandbox_internal_error",
+        "note": "房间内 SVG 石头"
+      },
+      {
+        "target": "#roomActions button:nth-child(2)",
+        "result": "502 sandbox_internal_error",
+        "note": "房间内普通 HTML 按钮"
+      }
+    ],
+    "hypothesis": "进入房间后页面持续重绘/动画，点击工具的可操作性等待无法稳定，sidecar 返回 500；同一按钮在地图阶段可用，所以不是选择器或权限问题",
+    "otherTools": {
+      "local_browser": "无已配对设备（devices 返回空）",
+      "mobile": "无真实设备通道"
+    },
+    "consequence": "19 间真实指针闭环仍无法完成；已确认真实点击在房间外可用、进入房间后不可用",
+    "notChanged": [
+      "未修改产品代码",
+      "未用 dispatchEvent 补位",
+      "历史 661 测试与 4 间 dispatchEvent 证据保持原级别"
+    ]
+  },
+  "rateLimitBoundary2026_11_24": {
+    "question": "browser_click 的 502 是否由 rate limit 引起",
+    "search": "在本会话历史中检索 \"rate limit\"，只命中用户本轮提问一条；没有任何工具结果包含 rate limit、429 或配额耗尽字样",
+    "conclusion": "本会话未观察到 rate limit exceeded。502 的返回体是 sidecar 的 sandbox_internal_error，与 rate limit 无关",
+    "attribution": "既然未出现该错误，其服务归属不可判定；不归因于用户、不归因于产品代码",
+    "rawError": {
+      "http": 502,
+      "code": "sandbox_internal_error",
+      "retryable": true,
+      "remote_path": "/sandbox/preview/sessions/<ref>/browser/click",
+      "remote_detail": "{\"code\":\"sandbox_internal_error\",\"message\":\"sidecar preview request failed with HTTP 500\",\"retriable\":true}"
+    },
+    "retry2026_11_24T08_13Z": [
+      {
+        "target": "#btnStart",
+        "result": "ok"
+      },
+      {
+        "target": "g[data-district=\"quarry\"]",
+        "result": "ok"
+      },
+      {
+        "target": "#districtPanel .room-list li:nth-child(1) button",
+        "result": "ok",
+        "note": "进入 r-c-major"
+      },
+      {
+        "target": "#roomActions button:nth-child(1)",
+        "result": "502 sandbox_internal_error",
+        "note": "房间内普通按钮，最小复现成立"
+      }
+    ],
+    "runState": "本轮 preview 创建、路由注册、导航与三次点击均正常执行，没有排队或暂停；只有房间内点击失败",
+    "separateBlockers": {
+      "rateLimit": "无证据，不列为阻塞",
+      "sandbox502": "阻塞 19 间真实指针闭环",
+      "mobileDevice": "无真实移动设备通道（local_browser 无配对设备）",
+      "humanEar": "无听者可做听检"
+    }
+  },
+  "inputChannelDiag2026_11_24b": {
+    "time": "2026-11-24T08:14Z",
+    "endpoint": "10.84.121.174",
+    "sequence": [
+      {
+        "step": "#btnStart",
+        "result": "ok"
+      },
+      {
+        "step": "g[data-district=\"quarry\"]",
+        "result": "ok"
+      },
+      {
+        "step": "房间行 → r-c-major",
+        "result": "ok"
+      },
+      {
+        "step": "#roomActions button:nth-child(1) 点击",
+        "result": "502 sandbox_internal_error"
+      },
+      {
+        "step": "等待 #roomActions button 就绪后再次点击",
+        "result": "502 sandbox_internal_error"
+      },
+      {
+        "step": "browser_press_key Enter 作用于同一按钮",
+        "result": "502 sandbox_internal_error"
+      }
+    ],
+    "finding": "房间视图下点击与按键两种输入通道都失败，evaluate/导航仍可用；因此不是元素类型、不是选择器、不是计时；判断为输入动作的可操作性等待在房间视图下无法稳定完成",
+    "confidence": "推断，未读到工具内部实现",
+    "notDone": [
+      "未无限重试",
+      "未改产品代码",
+      "未用 dispatchEvent 补位"
+    ],
+    "blockedItems": [
+      "19 间真实闭环",
+      "移动触控",
+      "人耳听检",
+      "校记卡重开渲染"
+    ]
   }
 }

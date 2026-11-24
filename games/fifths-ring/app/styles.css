@@ -558,3 +558,133 @@ body{
 .panel-identity .mark-slot{border-color:rgba(243,237,224,.22);color:rgba(243,237,224,.3)}
 .panel-identity .mark-slot.is-on{border-color:rgba(224,185,166,.6);color:#e0b9a6;background:rgba(224,185,166,.12)}
 .dp-name{color:#f0e8da}
+
+/* 随机化身：次要操作，不抢主 CTA */
+.avatar-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.btn-mini{font-size:11.5px;padding:4px 9px;letter-spacing:.02em}
+
+/* ================= 节奏桥梁 ================= */
+.rhythm-host{display:flex;flex-direction:column;gap:10px;margin:4px 0 10px}
+.rb-row{border:1px solid rgba(33,28,24,.2);border-radius:2px;padding:8px 10px;background:rgba(231,223,205,.28)}
+.rb-row.is-active{border-color:var(--ochre);box-shadow:inset 0 0 0 1px rgba(163,57,42,.22)}
+.rb-head{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;color:var(--ink)}
+.rb-left{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+.rb-left.is-full{color:var(--indigo)}
+.rb-left.is-over{color:var(--ochre)}
+.rb-track{position:relative;display:flex;height:36px;background:rgba(33,28,24,.05);border:1px solid rgba(33,28,24,.18);overflow:hidden;cursor:pointer}
+.rb-div{position:absolute;top:0;bottom:0;width:1px;background:rgba(33,28,24,.35)}
+.rb-plank{flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(243,237,224,.6);background:rgba(163,57,42,.16);font-family:var(--mono);font-size:10px;color:var(--ink);overflow:hidden}
+.rb-plank.is-rest{background:repeating-linear-gradient(45deg, rgba(111,100,85,.14), rgba(111,100,85,.14) 4px, transparent 4px, transparent 8px);color:var(--ink-soft)}
+.rb-empty{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:11px;color:rgba(111,100,85,.7);pointer-events:none}
+.rhythm-palette{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.rp-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rp-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;color:var(--ink-soft);min-width:30px}
+.rp-tile{font-family:var(--serif);font-size:12px;padding:6px 8px;border:1px solid rgba(33,28,24,.35);background:transparent;border-radius:2px;cursor:pointer;color:var(--ink)}
+.rp-tile:hover{background:rgba(33,28,24,.06)}
+.rp-tile:active{transform:translateY(1px)}
+.rp-tile.is-rest{border-style:dashed;color:var(--ink-soft)}
+
+/* ================= 声音状态与诊断 ================= */
+.masthead-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.audio-chip{
+  display:inline-flex;align-items:center;gap:6px;background:transparent;
+  border:1px solid rgba(243,237,224,.22);color:#e6dccb;border-radius:2px;
+  padding:4px 8px;font-family:var(--serif);font-size:11px;cursor:pointer;letter-spacing:.04em;
+}
+.audio-chip:hover{background:rgba(243,237,224,.08)}
+.audio-chip:focus-visible{outline:2px solid #e0b9a6;outline-offset:2px}
+.audio-chip .audio-wave,.audio-chip .audio-wave2{opacity:.25}
+.audio-chip[data-audio-state="ready"]{border-color:rgba(127,176,173,.6);color:#9fd0cc}
+.audio-chip[data-audio-state="ready"] .audio-wave,.audio-chip[data-audio-state="ready"] .audio-wave2{opacity:1}
+.audio-chip[data-audio-state="suspended"],.audio-chip[data-audio-state="failed"],
+.audio-chip[data-audio-state="unsupported"]{border-color:rgba(224,185,166,.5);color:#e0b9a6}
+.audio-state-line{font-weight:600;font-size:13.5px;margin:0 0 6px;color:#211c18}
+.audio-note{font-size:12px;line-height:1.7;color:#3b342c;margin:0 0 8px}
+.audio-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-family:var(--mono);font-size:11.5px;margin:10px 0;color:#3b342c}
+.audio-facts dt{color:var(--ink-soft)}
+.audio-facts dd{margin:0}
+.audio-ask{margin:10px 0 6px;font-size:12.5px;color:#3b342c}
+.audio-heard{display:flex;gap:8px;margin-bottom:8px}
+.audio-tips{font-size:12px;line-height:1.85;color:#3b342c;padding-left:18px;margin:6px 0 10px}
+.audio-diag-box{width:100%;height:120px;font-family:var(--mono);font-size:11px;margin-top:8px;border:1px solid rgba(33,28,24,.3);border-radius:2px;padding:6px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ================= 试音浮层 ================= */
+.warmup .sheet{max-width:540px}
+.warmup-lead{margin:0 0 6px;font-size:13.5px;line-height:1.7;color:#3b342c}
+.warmup-ring{display:flex;justify-content:center;margin:4px 0}
+.warmup-ring svg{max-width:330px;width:100%;height:auto}
+.warmup-hint{text-align:center;font-size:12.5px;color:var(--ink-soft);min-height:20px;margin:2px 0 10px}
+
+/* ================= 触控目标 ≥44px ================= */
+.btn{min-height:44px}
+.pitch{min-height:44px}
+.rp-tile{min-height:44px;min-width:56px}
+.chord-opt{min-height:48px}
+.form-chip{min-height:44px}
+.room-row{min-height:44px}
+.swatch{min-height:44px;min-width:44px}
+.audio-chip{min-height:44px;padding-top:8px;padding-bottom:8px}
+.rb-track{height:44px}
+
+/* ================= 常音与首差 ================= */
+.city-audio{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;margin:2px 0 10px}
+.city-audio-note{font-size:11.5px;color:var(--ink-soft)}
+.note-head.is-diff{stroke:var(--ochre);stroke-width:3.4}
+.rb-row.is-diff{border-color:var(--ochre);box-shadow:inset 0 0 0 2px rgba(163,57,42,.28)}
+.chord-opt.is-diff{border-width:2px;border-color:var(--ochre)}
+
+/* ================= 校记页 ================= */
+.diploma{display:none}
+.diploma-page{
+  width:180mm;min-height:250mm;margin:0 auto;padding:18mm 16mm;
+  background:#fff;color:#211c18;font-family:"Songti SC","Iowan Old Style",Georgia,serif;
+}
+.diploma-page h1{font-size:24px;letter-spacing:.2em;margin:0 0 4px;font-weight:600}
+.diploma-page .d-sub{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.2em;color:#6f6455;margin-bottom:14px}
+.diploma-page .d-head{display:flex;gap:16px;align-items:flex-start;border-bottom:1px solid #c9b9a4;padding-bottom:12px;margin-bottom:12px}
+.diploma-page .d-name{font-size:20px;letter-spacing:.2em;border-bottom:1px solid #a3392a;padding-bottom:3px;display:inline-block;margin-top:6px}
+.diploma-page .d-marks{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0}
+.diploma-page .d-mark{display:flex;align-items:center;gap:6px;font-size:12px;color:#9a8b78}
+.diploma-page .d-mark.is-on{color:#a3392a}
+.diploma-page .d-mark i{font-style:normal;font-size:10px}
+.diploma-page ul{list-style:none;padding:0;margin:6px 0 0;font-size:12px;line-height:1.9;color:#3b342c}
+.diploma-page .d-foot{margin-top:18px;padding-top:8px;border-top:1px solid #c9b9a4;font-size:10px;color:#7a6c5c;line-height:1.7}
+@media print{
+  .desk{display:none !important}
+  .diploma{display:block !important}
+  .diploma-page{margin:0;box-shadow:none}
+  @page{size:A4;margin:0}
+}
+
+/* ============ 复习巡演与掌握度 ============ */
+.tour-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:0 0 10px;padding:7px 10px;
+  border:1px solid var(--line,#d8cdbd);border-radius:2px;
+  background:rgba(255,255,255,.55);font-size:12px;color:#5a4e42;
+}
+.tour-bar-text{flex:1 1 auto;min-width:0}
+.tour-host{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
+.tour-counts{font-size:12px;color:#5a4e42}
+.tour-hint{font-size:12px;color:#8a7a68}
+.dp-mastery{margin:2px 0 8px;font-size:12px;color:#5a4e42}
+.verdict-mastery{
+  margin:8px 0 2px;padding:6px 10px;border-left:2px solid #7a6a56;
+  background:rgba(255,255,255,.5);font-size:12px;color:#4a4036;
+}
+.diploma-page .d-mastery{margin:10px 0 4px;font-size:11px;color:#4a4036;letter-spacing:.02em}
+@media (max-width:520px){
+  .tour-bar{font-size:11px}
+  .tour-bar .btn{min-height:36px}
+}
+
+.mission-plain{
+  margin:6px 0 2px;padding:7px 10px;border-left:2px solid #b9a88f;
+  background:rgba(255,255,255,.5);font-size:12px;line-height:1.65;color:#4a4036;
+}
+.fault-note{
+  margin:0 0 6px;padding:6px 9px;border-left:2px solid #a9502c;
+  background:rgba(255,255,255,.5);font-size:12px;line-height:1.65;color:#5a3a2c;
+}
+.diploma-page.room-card h1{font-size:19px}

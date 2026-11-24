@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>五度环 · 一座由音程承重的城</title>
-<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="styles.css?v=36">
 </head>
 <body>
 <div class="desk">
@@ -15,6 +15,15 @@
       <p class="subtitle">一座由音程承重的城</p>
     </div>
     <div class="masthead-right">
+      <button class="audio-chip" id="audioChip" type="button" data-audio-state="undetected">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path d="M4 9h3l4-3v12l-4-3H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path class="audio-wave" d="M15 9.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path class="audio-wave2" d="M17.4 7.2a7 7 0 0 1 0 9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span id="audioChipText">声音·待启用</span>
+      </button>
+      <span id="audioLive" class="sr-only" aria-live="polite"></span>
       <div class="seal-count">校记 <span id="sealCount">0</span> / <span id="sealTotal">6</span></div>
       <button class="btn btn-quiet" id="btnLanding" type="button" hidden>首页</button>
       <button class="btn btn-quiet" id="btnBackMap" type="button" hidden>回到环城</button>
@@ -75,6 +84,8 @@
         <div class="paper-meta">十二块石 · 六城区</div>
       </div>
       <div class="ring-host" id="cityHost"></div>
+      <div class="city-audio" id="cityAudio"></div>
+      <div class="tour-host" id="tourHost"></div>
       <div class="city-note">相邻两块石相差一个纯五度。城区越往外，常音越弱。</div>
     </section>
     <aside class="margin-col">
@@ -88,6 +99,7 @@
 
   <main class="board" id="viewRoom" hidden>
     <section class="paper" aria-label="工作页">
+      <div class="tour-bar" id="tourBar" hidden></div>
       <div class="paper-head">
         <h2 id="roomTitle">—</h2>
         <div class="paper-meta" id="roomMeta">—</div>
@@ -118,12 +130,40 @@
     </aside>
   </main>
 
+
+  <div class="veil warmup" id="warmupVeil" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="warmupTitle">
+      <div class="sheet-eyebrow">第一课</div>
+      <h2 id="warmupTitle">先听</h2>
+      <p class="warmup-lead">这一屏不用答什么。点石头，听声音。</p>
+      <div class="warmup-ring" id="warmupRing"></div>
+      <p class="warmup-hint" id="warmupHint">点一块石头，听听它。</p>
+      <div class="sheet-actions">
+        <button class="btn btn-ink" id="warmupDone" type="button">记下了</button>
+        <button class="btn btn-quiet" id="warmupSkip" type="button">跳过</button>
+      </div>
+    </div>
+  </div>
+
   <div class="veil" id="veil" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="verdictTitle">
       <div class="sheet-eyebrow" id="verdictEyebrow">校毕</div>
       <h2 id="verdictTitle">—</h2>
       <div id="verdictBody"></div>
       <div class="sheet-actions" id="sheetActions"></div>
+    </div>
+  </div>
+
+
+  <div class="veil" id="audioVeil" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="audioTitle">
+      <div class="sheet-eyebrow">声音</div>
+      <h2 id="audioTitle">声音状态与诊断</h2>
+      <div id="audioBody"></div>
+      <div class="sheet-actions" id="audioActions"></div>
+      <div class="sheet-actions">
+        <button class="btn" id="audioClose" type="button">关闭</button>
+      </div>
     </div>
   </div>
 
@@ -143,6 +183,7 @@
     <span>规则出处见讲解卡与《SOURCE_BIBLE》。</span>
   </footer>
 </div>
-<script src="game.js?v=27"></script>
+<div class="diploma" id="diplomaHost"></div>
+<script src="game.js?v=36"></script>
 </body>
 </html>
