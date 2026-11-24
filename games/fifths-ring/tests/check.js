@@ -711,6 +711,10 @@ ok('K: next room stays the primary button',
 ok('K: card block is skipped during the tour', src.indexOf('!(state.tour && state.tour.active)) {\n    var thisRoom') !== -1);
 ok('K: no third-party or network use', src.indexOf('fetch(') === -1);
 
+ok('K: preview card shrinks instead of scrolling',
+  css.indexOf('.card-preview .diploma-page{margin:0 auto;width:100%;max-width:680px') !== -1);
+ok('K: narrow screens drop the fixed A4 width', css.indexOf('@media (max-width:900px)') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

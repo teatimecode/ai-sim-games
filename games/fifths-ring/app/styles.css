@@ -695,5 +695,15 @@ body{
 .card-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .card-status{flex:1 1 100%;margin:6px 0 0;font-size:12px;line-height:1.6;color:#2f6a59}
 .card-preview{margin-top:10px;border-top:1px dashed #c9b9a4;padding-top:10px;overflow-x:auto}
-.card-preview .diploma-page{margin:0 auto;box-shadow:none;border:1px solid #c9b9a4}
-@media (max-width:520px){.card-preview .diploma-page{max-width:100%;padding:8mm}}
+.card-preview .diploma-page{margin:0 auto;width:100%;max-width:680px;min-height:0;box-sizing:border-box;box-shadow:none;border:1px solid #c9b9a4}
+@media (max-width:900px){
+  .card-preview{overflow-x:hidden}
+  .card-preview .diploma-page{max-width:100%;padding:8mm;box-sizing:border-box}
+  .card-preview .diploma-page h1{font-size:18px}
+  .card-preview .d-head{gap:10px}
+}
+@media (max-width:520px){
+  .card-preview .diploma-page{padding:6mm}
+  .card-preview .diploma-page h1{font-size:16px}
+  .card-preview .d-head svg{width:56px;height:84px}
+}
