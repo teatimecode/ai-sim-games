@@ -880,5 +880,49 @@
       "校记卡在浏览器中重新打开的可视渲染（只校验了文件字节）",
       "存档刷新/退出恢复的本轮抽样（沿用往轮与此前记录）"
     ]
+  },
+  "pointerDiagnosis2026_11_24": {
+    "sandboxEndpoints": [
+      "2026-11-23: 10.84.121.167（全量 502）",
+      "2026-11-24: 10.84.121.174（部分恢复）"
+    ],
+    "minimalRepro": [
+      {
+        "target": "#btnStart",
+        "result": "ok",
+        "note": "落地页按钮，真实指针点击成功，view=map"
+      },
+      {
+        "target": "g[data-district=\"quarry\"]",
+        "result": "ok",
+        "note": "SVG 城区节点成功"
+      },
+      {
+        "target": "#districtPanel .room-list li:nth-child(1) button",
+        "result": "ok",
+        "note": "进入 r-c-major 成功"
+      },
+      {
+        "target": "[data-pc=\"1\"]",
+        "result": "502 sandbox_internal_error",
+        "note": "房间内 SVG 石头"
+      },
+      {
+        "target": "#roomActions button:nth-child(2)",
+        "result": "502 sandbox_internal_error",
+        "note": "房间内普通 HTML 按钮"
+      }
+    ],
+    "hypothesis": "进入房间后页面持续重绘/动画，点击工具的可操作性等待无法稳定，sidecar 返回 500；同一按钮在地图阶段可用，所以不是选择器或权限问题",
+    "otherTools": {
+      "local_browser": "无已配对设备（devices 返回空）",
+      "mobile": "无真实设备通道"
+    },
+    "consequence": "19 间真实指针闭环仍无法完成；已确认真实点击在房间外可用、进入房间后不可用",
+    "notChanged": [
+      "未修改产品代码",
+      "未用 dispatchEvent 补位",
+      "历史 661 测试与 4 间 dispatchEvent 证据保持原级别"
+    ]
   }
 }
