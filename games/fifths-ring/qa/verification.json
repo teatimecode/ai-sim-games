@@ -964,5 +964,48 @@
       "mobileDevice": "无真实移动设备通道（local_browser 无配对设备）",
       "humanEar": "无听者可做听检"
     }
+  },
+  "inputChannelDiag2026_11_24b": {
+    "time": "2026-11-24T08:14Z",
+    "endpoint": "10.84.121.174",
+    "sequence": [
+      {
+        "step": "#btnStart",
+        "result": "ok"
+      },
+      {
+        "step": "g[data-district=\"quarry\"]",
+        "result": "ok"
+      },
+      {
+        "step": "房间行 → r-c-major",
+        "result": "ok"
+      },
+      {
+        "step": "#roomActions button:nth-child(1) 点击",
+        "result": "502 sandbox_internal_error"
+      },
+      {
+        "step": "等待 #roomActions button 就绪后再次点击",
+        "result": "502 sandbox_internal_error"
+      },
+      {
+        "step": "browser_press_key Enter 作用于同一按钮",
+        "result": "502 sandbox_internal_error"
+      }
+    ],
+    "finding": "房间视图下点击与按键两种输入通道都失败，evaluate/导航仍可用；因此不是元素类型、不是选择器、不是计时；判断为输入动作的可操作性等待在房间视图下无法稳定完成",
+    "confidence": "推断，未读到工具内部实现",
+    "notDone": [
+      "未无限重试",
+      "未改产品代码",
+      "未用 dispatchEvent 补位"
+    ],
+    "blockedItems": [
+      "19 间真实闭环",
+      "移动触控",
+      "人耳听检",
+      "校记卡重开渲染"
+    ]
   }
 }
