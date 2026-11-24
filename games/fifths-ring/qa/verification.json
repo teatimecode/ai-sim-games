@@ -924,5 +924,45 @@
       "未用 dispatchEvent 补位",
       "历史 661 测试与 4 间 dispatchEvent 证据保持原级别"
     ]
+  },
+  "rateLimitBoundary2026_11_24": {
+    "question": "browser_click 的 502 是否由 rate limit 引起",
+    "search": "在本会话历史中检索 \"rate limit\"，只命中用户本轮提问一条；没有任何工具结果包含 rate limit、429 或配额耗尽字样",
+    "conclusion": "本会话未观察到 rate limit exceeded。502 的返回体是 sidecar 的 sandbox_internal_error，与 rate limit 无关",
+    "attribution": "既然未出现该错误，其服务归属不可判定；不归因于用户、不归因于产品代码",
+    "rawError": {
+      "http": 502,
+      "code": "sandbox_internal_error",
+      "retryable": true,
+      "remote_path": "/sandbox/preview/sessions/<ref>/browser/click",
+      "remote_detail": "{\"code\":\"sandbox_internal_error\",\"message\":\"sidecar preview request failed with HTTP 500\",\"retriable\":true}"
+    },
+    "retry2026_11_24T08_13Z": [
+      {
+        "target": "#btnStart",
+        "result": "ok"
+      },
+      {
+        "target": "g[data-district=\"quarry\"]",
+        "result": "ok"
+      },
+      {
+        "target": "#districtPanel .room-list li:nth-child(1) button",
+        "result": "ok",
+        "note": "进入 r-c-major"
+      },
+      {
+        "target": "#roomActions button:nth-child(1)",
+        "result": "502 sandbox_internal_error",
+        "note": "房间内普通按钮，最小复现成立"
+      }
+    ],
+    "runState": "本轮 preview 创建、路由注册、导航与三次点击均正常执行，没有排队或暂停；只有房间内点击失败",
+    "separateBlockers": {
+      "rateLimit": "无证据，不列为阻塞",
+      "sandbox502": "阻塞 19 间真实指针闭环",
+      "mobileDevice": "无真实移动设备通道（local_browser 无配对设备）",
+      "humanEar": "无听者可做听检"
+    }
   }
 }
