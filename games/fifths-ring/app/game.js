@@ -959,18 +959,116 @@ function diplomaMarkup() {
   '</div>';
 }
 
+function roomLearnPoint(room) {
+  var map = {
+    scale: '大调音阶是五度环上连续的七块石，主音决定它是哪一种调式。',
+    rhythm: '时值加起来要正好等于拍号，每一拍都要有落音，分组才站得住。',
+    counterpoint: '对位是一音对一音地控制音程；平行五度会让两个声部粘在一起。',
+    harmony: '和弦按功能走，不协和要当场解决，欠下的账才不会拖到下一句。',
+    compass: '调性之间的距离可以数出来，近关系调最先到。',
+    set: '音集看的是最紧排列和共同音，与绝对音高无关。',
+    pop: '循环进行靠同一圈和弦反复，接得上就顺。',
+    form: '曲式靠段落边界和结构点认出来，先听整体再标局部。'
+  };
+  return map[room.kind] || '这一页考的是把听到的判断落到谱面上。';
+}
+
+// 本关实际做法，全部来自存档与判定，不编造
+function roomResultSummary(room, s) {
+  s = s || state;
+  if (room.kind === 'scale') {
+    var sc = (s.scale || {})[room.id];
+    if (!sc || !sc.sel || !sc.sel.length) return null;
+    var names = sc.sel.slice().sort(function (a, b) { return a - b; }).map(function (pc) { return NAMES[pc]; });
+    return names.join(' ') + '；主音 ' + (sc.tonic == null ? '未定' : NAMES[sc.tonic]);
+  }
+  if (room.kind === 'rhythm') {
+    var rh = (s.rhythm || {})[room.id];
+    if (!rh || !rh.bars) return null;
+    var bars = rh.bars.map(function (bar) {
+      return bar.map(function (p) { return (p.rest ? '休' : '') + p.len; }).join(' ');
+    });
+    if (!bars.join('').replace(/\s/g, '')) return null;
+    return bars.join(' ｜ ');
+  }
+  if (room.kind === 'counterpoint') {
+    var cp = (s.cp || {})[room.id];
+    var lv = LEVELS[room.cp];
+    if (!cp || !cp.slots || !lv) return null;
+    var filled = cp.slots.filter(function (v) { return v != null; }).length;
+    if (!filled) return null;
+    var bad = judge(lv, cp.slots).violations.length;
+    return filled + ' / ' + cp.slots.length + ' 个音已补，' + (bad ? '仍有 ' + bad + ' 处违例' : '判定无违例');
+  }
+  if (room.kind === 'harmony') {
+    var h = (s.harmony || {})[room.id];
+    if (!h || !h.chosen || !h.chosen.length) return null;
+    return h.chosen.map(function (c) { return c.rn; }).join(' → ');
+  }
+  if (room.kind === 'pop') {
+    var p = (s.pop || {})[room.id];
+    if (!p || !room.chords || !room.chords.length) return null;
+    var at = room.chords[p.pos % room.chords.length];
+    return p.step ? '已接 ' + p.step + ' 步，停在第 ' + room.chords.indexOf(at) + ' 个和弦 ' + at.rn : null;
+  }
+  if (room.kind === 'compass') {
+    var cs = (s.compass || {})[room.id];
+    if (!cs || !cs.path || !cs.path.length) return null;
+    return '从 ' + keyLabel(room.compass.from) + ' 走 ' + cs.path.length + ' 步到 ' + keyLabel({ pc: cs.pc, mode: cs.mode });
+  }
+  if (room.kind === 'set') {
+    var st = (s.set || {})[room.id];
+    if (!st) return null;
+    if (room.mode === 'common') {
+      if (!st.picked || !st.picked.length) return null;
+      return '共同音：' + st.picked.slice().sort(function (a, b) { return a - b; }).map(function (pc) { return NAMES[pc]; }).join(' ');
+    }
+    if (!st.picked || !st.picked.length) return null;
+    return '排列：' + st.picked.map(function (pc) { return NAMES[pc]; }).join(' ');
+  }
+  if (room.kind === 'form') {
+    var fm = (s.form || {})[room.id];
+    if (!fm) return null;
+    var bits = [];
+    var labels = fm.labels || {};
+    var keys = Object.keys(labels);
+    if (keys.length) bits.push(keys.map(function (k) { return labels[k]; }).join(' '));
+    if (fm.boundaries && fm.boundaries.length) bits.push(fm.boundaries.length + ' 条分界');
+    return bits.length ? bits.join('；') : null;
+  }
+  return null;
+}
+
+function roomPlayableIndex(id) {
+  var list = ROOMS.filter(function (r) { return r.kind !== 'locked'; });
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return i + 1;
+  return 0;
+}
+
 function roomCardFacts(s, id) {
   s = s || state;
   var room = ROOM_INDEX[id];
   if (!room) return null;
-  var rec = s.records && s.records[room.district];
+  var rec = (s.records || {})[room.district];
+  var masteryLevel = (s.mastery && s.mastery[id]) || null;
+  var ev = (s.evidence || {})[id] || { hints: 0, faults: 0 };
+  var district = districtById(room.district) || {};
+  var total = ROOMS.filter(function (r) { return r.kind !== 'locked'; }).length;
   return {
+    game: '五度环',
     room: room.title,
-    district: (districtById(room.district) || {}).name || '',
-    mastered: (s.mastery && s.mastery[id]) || null,
-    level: MASTERY_LABEL[(s.mastery && s.mastery[id]) || ''] || '已校',
-    record: (rec && rec.choice) ? rec.choice : '未记',
-    name: s.signed || '（留白）'
+    district: district.name || '',
+    goal: (room.guide && room.guide.goal) || (room.target && room.target.label) || '',
+    mastered: masteryLevel,
+    level: MASTERY_LABEL[masteryLevel || ''] || '已通过',
+    evidence: ev.hints || ev.faults ? (ev.hints ? '提示 ' + ev.hints + ' 次' : '') + (ev.hints && ev.faults ? '、' : '') + (ev.faults ? '修正 ' + ev.faults + ' 次' : '') : '零提示、一次通过',
+    summary: roomResultSummary(room, s),
+    learning: roomLearnPoint(room),
+    progress: roomPlayableIndex(id) + ' / ' + total,
+    signed: !!s.signed,
+    name: s.signed || '记谱学徒（未署名）',
+    record: (rec && rec.choice) ? rec.choice : null,
+    recordHint: (rec && rec.choice) ? '' : '该城区集齐印记、进入终页记校记时添加。'
   };
 }
 
@@ -979,12 +1077,19 @@ function roomCardMarkup(id) {
   if (!f) return '';
   var av = avatarSVG(avatarOf(), 68).outerHTML;
   return '<div class="diploma-page room-card">' +
-    '<h1>' + f.room + '</h1>' +
-    '<div class="d-sub">' + f.district + ' · 环城记谱公会</div>' +
-    '<div class="d-head">' + av + '<div><div>这一页由</div><div class="d-name">' + f.name + '</div>' +
-    '<div class="d-sub" style="margin-top:8px">掌握 · ' + f.level + '</div></div></div>' +
-    '<div class="d-sub">这一页的校记</div><ul><li>' + f.record + '</li></ul>' +
-    '<div class="d-foot">声音由浏览器实时合成，本页不含音频文件。</div>' +
+    '<h1>五度环 · 本关成果卡</h1>' +
+    '<div class="d-sub">' + f.district + ' · ' + f.room + ' · 第 ' + f.progress + ' 关</div>' +
+    '<div class="d-head">' + av +
+      '<div><div class="d-sub">记谱人</div><div class="d-name">' + f.name + '</div>' +
+      '<div class="d-sub" style="margin-top:6px">' + (f.signed ? '已署名' : '完成全城校记后可在终页署名') + '</div></div>' +
+      '<div class="d-verdict"><b>' + f.level + '</b><span>' + f.evidence + '</span></div>' +
+    '</div>' +
+    '<div class="d-row"><span class="d-k">本关任务</span><div class="d-v">' + f.goal + '</div></div>' +
+    '<div class="d-row"><span class="d-k">我做的</span><div class="d-v">' + (f.summary || '已通过这一关的判定。') + '</div></div>' +
+    '<div class="d-row"><span class="d-k">学到的</span><div class="d-v">' + f.learning + '</div></div>' +
+    '<div class="d-row"><span class="d-k">校记</span><div class="d-v">' + (f.record || '尚未添加校记') +
+      (f.recordHint ? '<em class="d-hint">' + f.recordHint + '</em>' : '') + '</div></div>' +
+    '<div class="d-foot">这是本关成果卡，不是存档；进度会自动保存。声音由浏览器实时合成，本页不含音频文件。</div>' +
   '</div>';
 }
 
@@ -5997,6 +6102,7 @@ if (typeof module !== 'undefined' && module.exports) {
     masteryEvidenceText: masteryEvidenceText, noteHintUse: noteHintUse, noteFault: noteFault,
     faultNarrative: faultNarrative, roomCardFacts: roomCardFacts, roomCardMarkup: roomCardMarkup,
     roomCardFilename: roomCardFilename, printRoomCard: printRoomCard, cardOfferBlock: cardOfferBlock,
+    roomResultSummary: roomResultSummary, roomLearnPoint: roomLearnPoint, roomPlayableIndex: roomPlayableIndex,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
     diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,
