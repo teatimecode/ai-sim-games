@@ -71,7 +71,7 @@ verification:
 
 ### 本轮实测
 
-`node qa/verify.mjs` 退出码 0，输出：主线（130 座 · 全新设计）31 架通关（现金 5.82 亿，TC 第 12 季、PC 第 13 季）；不招人 14 架终止；不招试飞 12 架终止；贪心接单 6 架终止。实机 18 回合由沙箱 Chromium 真实点击完成，截图存于 `qa/evidence/`（`01-tech` / `02-beat` / `03-tc` / `04-ending` / `05-restart` / `06-codex`）。
+`node qa/verify.mjs` 退出码 0，输出：主线（130 座 · 全新设计）31 架通关（TC 第 12 季、PC 第 13 季）；不招人 14 架终止；不招试飞 12 架终止；贪心接单 6 架终止。实机 18 回合由沙箱 Chromium 真实点击完成，截图存于 `qa/evidence/`（`16-assistant-1440` / `11-ui-1280x720` / `12-ui-900` / `17-assistant-430` 等）。
 
 ## 限制
 
