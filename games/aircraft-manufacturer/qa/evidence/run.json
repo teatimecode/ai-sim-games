@@ -3,7 +3,7 @@
   "runId": "main-path",
   "buildHash": "cbfe94b59282f8d8",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
-  "startedAt": "2026-11-23T09:50:00Z",
+  "startedAt": "2026-11-23T10:20:00Z",
   "inputTrace": [
     {
       "step": 1,
@@ -132,7 +132,13 @@
         "assistantPanel": true,
         "captureMethod": "local chromium headless (--disable-dev-shm-usage)",
         "assistantCollapsedByDefault": true,
-        "assetProbe": "HEAD，缺失不请求图片"
+        "assetProbe": "HEAD，缺失不请求图片",
+        "screenshotSha256": {
+          "16": "9c604d69ee41",
+          "11": "73a0e9d84790",
+          "12": "5c33df3a0937",
+          "17": "572da7ae9f56"
+        }
       }
     },
     "input": {
