@@ -1007,5 +1007,23 @@
       "人耳听检",
       "校记卡重开渲染"
     ]
+  },
+  "productionFixes2026_11_24": {
+    "A_confirmed": [
+      "地图热区：在采石场节点圆心与化身中心两点做 elementFromPoint，命中都是 city-node 圆圈而不是化身；foreignObject pointer-events=none、aria-hidden=true，节点 tabindex=0、role=button、aria-label=「采石场，已完成 0 / 5」",
+      "骨架试听：r-meter 空白作答（两小节都空）调用听骨架，创建 128 个振荡器、时长 3.2 秒、AudioContext 状态 running",
+      "下一关标签：19 间逐间调用 nextLabelFor，首间得「下一关：把桥板铺满」、末间得「回到环城」；pendingRecord 时得「记这一区的校记」",
+      "结算按钮：通过态结算层出现主按钮「下一关：升号从哪来」（btn-ink），另有「存这张校记卡」与「回环城」"
+    ],
+    "B_statePipeline": [
+      "键盘 Enter/Space 激活城区：节点可聚焦、处理函数已注册，但 sandbox press_key 返回 502，未做真实按键验证",
+      "下一关点击后实际跳转与存档写入：按钮渲染与标签已验证，点击因 sandbox 502 未完成"
+    ],
+    "C_unverified": [
+      "生产者 URL https://teatime.lucki.cn/ai-sim-games/games/fifths-ring/ 只能在合并后的 commit 看到，本轮未在生产验证",
+      "390/768 两种宽度下的真实触控与 hover",
+      "人耳听检"
+    ],
+    "sandboxNote": "browser_click 与 press_key 在房间内仍 502，与本次修复无关"
   }
 }

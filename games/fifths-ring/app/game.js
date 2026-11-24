@@ -1429,7 +1429,7 @@ var ROOMS = [
     },
     guide: {
       goal: '给两小节 4/4 的桥铺上音符或休止，让每小节正好十六个最小单位，并且每一拍都有落音。',
-      steps: ['先点「试听整段」，听一遍四拍的骨架。', '点一个小节选中它，再从素材板挑时值铺上去；铺满会自动跳到下一小节。', '铺错了用「撤销一块」或「清空这一小节」，两小节都满了再呈交。'],
+      steps: ['先点「听骨架」，听一遍四拍的拍点。', '点一个小节选中它，再从素材板挑时值铺上去；铺满会自动跳到下一小节。', '铺错了用「撤销一块」或「清空这一小节」，两小节都满了再呈交。'],
       done: '两小节各 16 个单位，四个拍点上都有落音。'
     },
     rhythm: {
@@ -1486,7 +1486,7 @@ var ROOMS = [
     },
     guide: {
       goal: '给两小节 6/8 的桥铺上时值，每小节正好十二个单位，两组各六个单位处都要有落音，而且不能有音符横跨组界。',
-      steps: ['先点「试听整段」，注意重音是 1-2-3、4-5-6 而不是匀速六下。', '用附点四分或「四分＋八分」把每组铺满，别让一块横跨两组。', '两组都落音、两小节都满十二格时再呈交。'],
+      steps: ['先点「听骨架」，注意重音是 1-2-3、4-5-6 而不是匀速六下。', '用附点四分或「四分＋八分」把每组铺满，别让一块横跨两组。', '两组都落音、两小节都满十二格时再呈交。'],
       done: '两小节各 12 个单位，第 1 与第 7 个单位上都有落音，没有音符跨组界。'
     },
     rhythm: {
@@ -2305,8 +2305,9 @@ function renderMap() {
     if (sealed) cls += ' is-sealed';
     if (playable.length === 0) cls += ' is-locked';
 
-    var g = svgEl('g', { style: 'cursor:pointer' });
+    var g = svgEl('g', { style: 'cursor:pointer', tabindex: '0', role: 'button' });
     g.setAttribute('data-district', d.id);
+    g.setAttribute('aria-label', d.name + '，' + (playable.length ? '已完成 ' + done + ' / ' + playable.length : '仅讲解'));
     g.appendChild(svgEl('circle', { cx: x, cy: y, r: 44, class: cls }));
     var t1 = svgEl('text', { x: x, y: y - 2, class: 'city-name' });
     t1.textContent = d.name;
@@ -2325,19 +2326,29 @@ function renderMap() {
   var cur = districtById(state.district) || DISTRICTS[0];
   var ang = cur.angle * Math.PI / 180;
   var ax = 210 + 148 * Math.cos(ang), ay = 210 + 148 * Math.sin(ang);
-  var fo = svgEl('foreignObject', { x: ax + 14, y: ay + 4, width: 40, height: 60 });
+  var fo = svgEl('foreignObject', { x: ax + 14, y: ay + 4, width: 40, height: 60, 'pointer-events': 'none', 'aria-hidden': 'true' });
   var holder = document.createElement('div');
   holder.className = 'map-avatar';
   holder.appendChild(avatarSVG(avatarOf(), 34));
   fo.appendChild(holder);
   svg.appendChild(fo);
 
-  svg.addEventListener('click', function (ev) {
-    var g = ev.target.closest ? ev.target.closest('g[data-district]') : null;
+  function pickDistrict(g) {
     if (!g) return;
     state.district = g.getAttribute('data-district');
+    stopDrone();
     renderMap();
     saveState();
+  }
+  svg.addEventListener('click', function (ev) {
+    pickDistrict(ev.target.closest ? ev.target.closest('g[data-district]') : null);
+  });
+  svg.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    var g = ev.target.closest ? ev.target.closest('g[data-district]') : null;
+    if (!g) return;
+    ev.preventDefault();
+    pickDistrict(g);
   });
 
   host.appendChild(svg);
@@ -2806,12 +2817,36 @@ function judgeRhythm(room, bars) {
 
 function rhythmSubmitCheck(room, st) {
   var j = judgeRhythm(room, st.bars);
-  if (!st.listened) return { ok: false, code: 'NEED_LISTEN', message: '先点「试听整段」完整听一遍，再呈交。' };
+  if (!st.listened) return { ok: false, code: 'NEED_LISTEN', message: '先点「听骨架」完整听一遍，再呈交。' };
   if (!j.ok) return { ok: false, code: j.first.code, message: j.first.message };
   return { ok: true };
 }
 
 /* 播放：遇到第一个断点就停，把问题听出来 */
+// 骨架试听：不管有没有作答都能响，按拍号把每拍与细分敲一遍
+function playRhythmSkeleton(room) {
+  var c = ensureAudio();
+  if (!c) return 0;
+  var R = room.rhythm;
+  var per = R.ticksPerBar;
+  var unit = 0.1;
+  var t0 = c.currentTime + 0.08;
+  var t = 0;
+  for (var b = 0; b < R.bars; b++) {
+    for (var tick = 0; tick < per; tick++) {
+      var accent = R.requireOnsets.indexOf(tick) !== -1;
+      tone(accent ? 88 : 76, t0 + (t + tick) * unit, 0.06, accent ? 0.16 : 0.06);
+    }
+    t += per;
+  }
+  return t * unit;
+}
+
+function rhythmHasContent(room) {
+  var st = rhythmState(room);
+  return st.bars.some(function (bar) { return bar.length > 0; });
+}
+
 function playRhythm(room, st, opts) {
   opts = opts || {};
   var c = ensureAudio();
@@ -3020,13 +3055,34 @@ function renderRhythmRoom(room, body, barUi) {
   if (st.checked && st.lastError) items.push({ label: '未通过', message: st.lastError, cls: 'is-bad' });
   renderMarkList(items, '桥还没铺。');
 
-  barUi.listen(mkBtn('试听整段', 'btn', function () {
+  barUi.listen(mkBtn('听骨架', 'btn', function () {
     var s2 = rhythmState(room);
+    var c = ensureAudio();
+    if (!c) {
+      s2.lastError = '声音没起来：浏览器还没解锁音频，点右上角「声音」看诊断。';
+      renderRoom();
+      return;
+    }
     s2.listened = true;
-    ensureAudio();
-    playRhythm(room, s2, { stopAtError: false });
+    playRhythmSkeleton(room);
     renderRoom();
     saveState();
+  }));
+  barUi.listen(mkBtn('听你铺的', 'btn btn-quiet', function () {
+    var s2 = rhythmState(room);
+    var c = ensureAudio();
+    if (!c) {
+      s2.lastError = '声音没起来：浏览器还没解锁音频，点右上角「声音」看诊断。';
+      renderRoom();
+      return;
+    }
+    if (!rhythmHasContent(room)) {
+      s2.lastError = '桥还是空的，先点「听骨架」听节拍，或铺几块再听自己的版本。';
+      renderRoom();
+      return;
+    }
+    playRhythm(room, s2, { stopAtError: false });
+    renderRoom();
   }));
   barUi.task(mkBtn('撤销一块', 'btn', function () { rhythmUndo(room); }));
   barUi.task(mkBtn('清空这一小节', 'btn btn-quiet', function () { rhythmClearBar(room); }));
@@ -3795,7 +3851,7 @@ function roomProgress(room) {
     rs.bars.forEach(function (b) { filled += barSum(b); });
     var totalB = perB * rs.bars.length;
     out.progress = '已铺 ' + filled + ' / ' + totalB + ' 个最小单位';
-    if (!rs.listened) out.next = '先点「试听整段」听一遍，再开始铺。';
+    if (!rs.listened) out.next = '先点「听骨架」听一遍拍点，再开始铺。';
     else if (filled < totalB) out.next = '点小节选中它，挑时值铺上去；铺满会自动跳下一小节。';
     else out.next = '点「呈交乐长」看桥通不通。';
     var jr = judgeRhythm(room, rs.bars);
@@ -5254,8 +5310,13 @@ function showVerdict(o) {
   (o.actions || []).forEach(function (a) {
     actions.appendChild(mkBtn(a.label, a.cls || 'btn', a.fn));
   });
-  if (passLike && state.roomId && ROOM_INDEX[state.roomId]) {
+  if (passLike && state.roomId && ROOM_INDEX[state.roomId] && !(state.tour && state.tour.active)) {
+    var thisRoom = ROOM_INDEX[state.roomId];
+    actions.appendChild(mkBtn(nextLabelFor(thisRoom), 'btn btn-ink', function () { goNext(thisRoom); }));
     actions.appendChild(mkBtn('存这张校记卡', 'btn btn-quiet', function () { downloadRoomCard(state.roomId); }));
+  }
+  if (passLike && !(state.tour && state.tour.active)) {
+    actions.appendChild(mkBtn('回环城', 'btn btn-quiet', function () { hideVerdict(); clearRoom(ROOM_INDEX[state.roomId]); }));
   }
   if (state.tour && state.tour.active) {
     actions.appendChild(mkBtn(state.tour.done ? '看总结' : '下一关', 'btn', tourAdvance));
@@ -5518,6 +5579,38 @@ function renderTourBar() {
   }
   var quit = mkBtn('退出巡演', 'btn btn-quiet btn-mini', leaveTour);
   host.appendChild(quit);
+}
+
+function nextPlayableAfter(room, s) {
+  s = s || state;
+  var cleared = s.cleared || {};
+  var list = ROOMS.filter(function (r) { return r.kind !== 'locked'; });
+  var i = list.findIndex(function (r) { return r.id === room.id; });
+  for (var k = i + 1; k < list.length; k++) {
+    if (!cleared[list[k].id]) return list[k];
+  }
+  return null;
+}
+
+function nextLabelFor(room, s) {
+  s = s || state;
+  if (s.pendingRecord) return '记这一区的校记';
+  var next = nextPlayableAfter(room, s);
+  if (next) return '下一关：' + next.title;
+  return '回到环城';
+}
+
+function goNext(room) {
+  var next = nextPlayableAfter(room);
+  var pending = !!state.pendingRecord;
+  var ending = endingEligible(state) && !state.signed;
+  hideVerdict();
+  if (pending || !next || ending) { clearRoom(room); return; }
+  state.roomId = null;
+  state.view = 'map';
+  state.district = room.district;
+  saveState();
+  enterRoom(next.id);
 }
 
 function passRoom(room) {
@@ -5832,6 +5925,8 @@ if (typeof module !== 'undefined' && module.exports) {
     createAudioController: createAudioController, audioDiagText: audioDiagText,
     referencePlan: referencePlan, playReference: playReference, roomHasFailure: roomHasFailure,
     masteryAfterPass: masteryAfterPass, masteryCounts: masteryCounts, masteryOf: masteryOf,
+    nextPlayableAfter: nextPlayableAfter, nextLabelFor: nextLabelFor, goNext: goNext,
+    playRhythmSkeleton: playRhythmSkeleton, rhythmHasContent: rhythmHasContent,
     buildTour: buildTour, tourCurrent: tourCurrent, tourSummary: tourSummary,
     masteryEvidenceText: masteryEvidenceText, noteHintUse: noteHintUse, noteFault: noteFault,
     faultNarrative: faultNarrative, roomCardFacts: roomCardFacts, roomCardMarkup: roomCardMarkup,

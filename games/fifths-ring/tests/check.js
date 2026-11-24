@@ -656,6 +656,44 @@ ok('F: room card can be downloaded', src.indexOf('function downloadRoomCard') !=
 ok('F: room card sends nothing to a server', src.indexOf('fetch(') === -1);
 ok('F: room card is offered on the pass sheet', src.indexOf('存这张校记卡') !== -1);
 
+/* ---------- 22. 生产反馈三项 ---------- */
+// 1) 地图 Avatar 不拦截交互，节点可键盘操作
+ok('M1: map avatar cannot capture pointer events',
+  src.indexOf("'pointer-events': 'none', 'aria-hidden': 'true'") !== -1);
+ok('M1: map avatar still renders', src.indexOf("holder.className = 'map-avatar'") !== -1);
+ok('M1: district nodes are focusable buttons',
+  src.indexOf("tabindex: '0', role: 'button'") !== -1);
+ok('M1: district nodes carry an accessible name', src.indexOf("g.setAttribute('aria-label', d.name") !== -1);
+ok('M1: district nodes answer Enter and Space',
+  src.indexOf("ev.key !== 'Enter' && ev.key !== ' '") !== -1);
+
+// 2) 结算后的下一关 CTA
+const s1 = { cleared: {}, pendingRecord: null };
+const first = playable[0];
+ok('N: next room is the first uncleared one', m.nextPlayableAfter(first, s1).id === playable[1].id);
+ok('N: cleared rooms are skipped',
+  m.nextPlayableAfter(first, { cleared: { [playable[1].id]: true } }).id === playable[2].id);
+const everyCleared = {}; playable.forEach((r) => { everyCleared[r.id] = true; });
+ok('N: no next room at the end', m.nextPlayableAfter(playable[playable.length - 1], { cleared: everyCleared }) === null);
+ok('N: locked rooms are never proposed',
+  m.nextPlayableAfter(first, { cleared: {} }).kind !== 'locked');
+ok('N: label names the next room', m.nextLabelFor(first, { cleared: {} }) === '下一关：' + playable[1].title);
+ok('N: label asks for the record first', m.nextLabelFor(first, { cleared: {}, pendingRecord: 'quarry' }) === '记这一区的校记');
+ok('N: label falls back to the map', m.nextLabelFor(playable[playable.length - 1], { cleared: everyCleared }) === '回到环城');
+ok('N: pass sheet carries the next-room button', src.indexOf("nextLabelFor(thisRoom), 'btn btn-ink'") !== -1);
+ok('N: record sheet is not skipped by the shortcut', src.indexOf('if (pending || !next || ending) { clearRoom(room); return; }') !== -1);
+ok('N: ending still wins over jumping ahead', src.indexOf('endingEligible(state) && !state.signed') !== -1);
+
+// 3) 节奏房试听：骨架独立、空白不静默
+ok('R: skeleton plays without any answer', typeof m.playRhythmSkeleton === 'function');
+ok('R: skeleton covers every tick', src.indexOf('for (var tick = 0; tick < per; tick++)') !== -1);
+ok('R: skeleton button is separate from own playback', src.indexOf("mkBtn('听骨架'") !== -1 && src.indexOf("mkBtn('听你铺的'") !== -1);
+ok('R: empty answer is detected before playing', typeof m.rhythmHasContent === 'function');
+ok('R: empty click explains itself', src.indexOf('桥还是空的，先点「听骨架」听节拍') !== -1);
+ok('R: audio gate failure is visible', src.indexOf('声音没起来：浏览器还没解锁音频') !== -1);
+ok('R: mission card matches the new button', src.indexOf('先点「听骨架」') !== -1);
+ok('R: old wording is gone', src.indexOf('先点「试听整段」') === -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
