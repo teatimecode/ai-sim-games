@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "2d2e4e191c51bf06",
+  "buildHash": "cbfe94b59282f8d8",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
-  "startedAt": "2026-11-23T09:30:00Z",
+  "startedAt": "2026-11-23T09:50:00Z",
   "inputTrace": [
     {
       "step": 1,
@@ -109,9 +109,9 @@
       "state": {
         "visual": "qa/evidence/16-assistant-1440.png",
         "extraVisuals": [
-          "qa/evidence/17-assistant-430.png",
-          "qa/evidence/01-tech.png",
-          "qa/evidence/11-ui-1280x720.png"
+          "qa/evidence/11-ui-1280x720.png",
+          "qa/evidence/12-ui-900.png",
+          "qa/evidence/17-assistant-430.png"
         ],
         "fiveGatesVisible": true,
         "fiveDeptsVisible": true,
@@ -130,7 +130,9 @@
         ],
         "guideOverlap": false,
         "assistantPanel": true,
-        "captureMethod": "local chromium headless (--disable-dev-shm-usage)"
+        "captureMethod": "local chromium headless (--disable-dev-shm-usage)",
+        "assistantCollapsedByDefault": true,
+        "assetProbe": "HEAD，缺失不请求图片"
       }
     },
     "input": {

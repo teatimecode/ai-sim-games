@@ -11,7 +11,18 @@
   let guided = true;
 
   /* ---------------- 项目助理（RPG 式引导） ---------------- */
-  const ASSIST_UI = { seen: [], hidden: false, log: [] };
+  const ASSIST_UI = { seen: [], hidden: false, collapsed: true, log: [] };
+  const ASSET_OK = { avatar: false };
+  function probeAssets() {
+    Object.keys(PHOTO_SRC).forEach(function (k) {
+      fetch(PHOTO_SRC[k], { method: 'HEAD' }).then(function (r) {
+        if (r.ok) { ASSET_OK[k] = true; render(); }
+      }).catch(function () { /* 缺失即用线稿，不请求资源本体 */ });
+    });
+    fetch(AVATAR_SRC, { method: 'HEAD' }).then(function (r) {
+      if (r.ok) { ASSET_OK.avatar = true; render(); }
+    }).catch(function () {});
+  }
   const AVATAR_SRC = 'assets/assistant.jpg';
   function avatarSvg() {
     return '<svg viewBox="0 0 96 96" width="100%" height="100%">' +
@@ -24,24 +35,37 @@
   }
   function assistCard() {
     const st = E.nextAssistStep(S, ASSIST_UI.seen);
-    if (!st || ASSIST_UI.hidden || S.ending) return '';
+    if (!st || S.ending) return '';
+    if (ASSIST_UI.hidden) {
+      return '<button class="assist-chip" data-assist-op="reopen" title="叫回林工">' +
+        '<span class="chipavatar">' + avatarSvg() + '</span><span class="chipn">林工</span></button>';
+    }
+    if (ASSIST_UI.collapsed) {
+      return '<button class="assist-chip" data-assist-op="expand" title="展开提示">' +
+        '<span class="chipavatar">' + avatarSvg() + '</span><span class="chipn">林工 · 有提示</span><span class="chipdot"></span></button>';
+    }
     const ops = st.ops.map(function (o, i) {
       return '<button class="abtn' + (i === 0 ? ' main' : '') + '" data-assist-op="' + i + '">' + esc(o.t) + '</button>';
     }).join('');
     return '<div class="assist" data-step="' + st.id + '">' +
-      '<div class="avatar"><img src="' + AVATAR_SRC + '" alt="" onerror="this.remove()">' + avatarSvg() + '</div>' +
+      '<div class="avatar">' + (ASSET_OK.avatar ? '<img src="' + AVATAR_SRC + '" alt="">' : '') + avatarSvg() + '</div>' +
       '<div class="abubble">' +
       '<div class="awho"><b>' + esc(E.ASSIST.name) + '</b><em>' + esc(E.ASSIST.role) + ' · 第 ' + st.season + ' 季</em></div>' +
       '<p class="atext">' + esc(st.text) + '</p>' +
       '<p class="anext">' + esc(st.next) + '</p>' +
       '<div class="aops">' + ops +
-      '<button class="abtn ghost" data-assist-op="skip">跳过引导</button>' +
-      '<button class="abtn ghost" data-assist-op="replay">回看</button></div>' +
+      '<div class="aops2">' +
+      '<button class="abtn ghost" data-assist-op="collapse">收起</button>' +
+      '<button class="abtn ghost" data-assist-op="skip">关闭</button>' +
+      '<button class="abtn ghost" data-assist-op="replay">回看</button></div></div>' +
       '</div></div>';
   }
   function assistHandle(op) {
     const st = E.nextAssistStep(S, ASSIST_UI.seen);
     if (!st) return;
+    if (op === 'expand') { ASSIST_UI.collapsed = false; render(); return; }
+    if (op === 'collapse') { ASSIST_UI.collapsed = true; render(); return; }
+    if (op === 'reopen') { ASSIST_UI.hidden = false; ASSIST_UI.collapsed = false; render(); return; }
     if (op === 'skip') { ASSIST_UI.hidden = true; render(); return; }
     if (op === 'replay') { showAssistLog(); return; }
     const act = st.ops[Number(op)];
@@ -193,7 +217,7 @@
   function artBlock(key) {
     const svg = PROLOGUE_ART[key] || '';
     const src = PHOTO_SRC[key];
-    if (!src) return '<div class="proart">' + svg + '</div>';
+    if (!src || !ASSET_OK[key]) return '<div class="proart">' + svg + '</div>';
     return '<div class="proart">' +
       '<img class="artimg" src="' + src + '" alt="" onerror="this.parentNode.classList.add(\'noimg\');this.remove()">' +
       '<div class="artfallback">' + svg + '</div>' +
@@ -396,7 +420,7 @@
   }
   function finishPrologue() {
     S = E.newGame({ seed: S.seed, seat: prologuePick.seat, route: prologuePick.route });
-    S.tutOn = true; beatShown = 0; ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false;
+    S.tutOn = true; beatShown = 0; ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false; ASSIST_UI.collapsed = true;
     closeModal();
     render();
     showOnboard(0);
@@ -1255,7 +1279,7 @@
     showSettlement(r);
   }
   function restart() {
-    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {}; S.tutOn = true; beatShown = 0; ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false;
+    S = E.newGame(); tab = 'tech'; dept = 'design'; seen = {}; S.tutOn = true; beatShown = 0; ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false; ASSIST_UI.collapsed = true;
     render();
     showOnboard(0);
   }
@@ -1403,6 +1427,7 @@
 
   // QA/截图入口：?skipIntro=1 直接进入第 1 季（跳过序章与融资弹窗），不影响正常流程
   const SKIP_INTRO = /(?:^|[?&])skipIntro=1(?:&|$)/.test(location.search);
+  probeAssets();
   render();
   if (SKIP_INTRO) {
     E.setFinance(S, 'gov');

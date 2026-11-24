@@ -207,6 +207,17 @@ done.pending.assign = { d3: 3 };
 const dr = E.commit(done);
 assert(dr.notes.some((n) => n.indexOf('系统布置与数字样机') >= 0), '完成工作项应写入 doneNow 记录');
 
+/* --- 助理折叠与资源探测（源码契约断言） --- */
+const uiSrc = readFileSync(resolve(ROOT, 'ui.js'), 'utf8');
+const htmlSrc = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
+const cssSrc = readFileSync(resolve(ROOT, 'game.css'), 'utf8');
+assert(/collapsed:\s*true/.test(uiSrc), '助理应默认折叠');
+assert(uiSrc.indexOf("op === 'expand'") >= 0 && uiSrc.indexOf("op === 'collapse'") >= 0, '应支持展开与收起');
+assert(uiSrc.indexOf('probeAssets') >= 0 && uiSrc.indexOf('ASSET_OK') >= 0, '应有资源探测，缺失时不请求图片');
+assert(htmlSrc.indexOf('assisthost') >= 0, '页面应挂载助理容器');
+assert(htmlSrc.indexOf('data-preview') >= 0, '底栏应有结算预览入口');
+assert(cssSrc.indexOf('.assist-chip') >= 0, '折叠态样式应存在');
+
 /* --- 助理引导 --- */
 assert(E.ASSIST && E.ASSIST.steps.length >= 8, '助理脚本应有 8 步以上，实际 ' + (E.ASSIST.steps || []).length);
 assert(E.ASSIST.steps.every((x) => x.ops.length <= 2), '每步只给不超过两个选择');
