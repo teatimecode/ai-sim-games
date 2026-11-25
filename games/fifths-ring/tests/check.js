@@ -870,6 +870,31 @@ ok('V2: slice rooms can offer a variant',
     return m.variantSupports(playable.find(function (r) { return r.id === id; }));
   }).length >= 3);
 
+/* ---------- 28. 曲式变式 + 四房 acceptance ---------- */
+const formRoom = playable.find((r) => r.id === 'r-theme');
+const fVar = m.makeVariant(formRoom, 2);
+ok('F2: form variant is generated', !!fVar.form && fVar.form !== formRoom.form);
+ok('F2: form variant is no longer than the original', fVar.form.bars.length <= formRoom.form.bars.length);
+ok('F2: form variant is A-B-A', fVar.form.segments[0].label === fVar.form.segments[2].label &&
+  fVar.form.segments[0].label !== fVar.form.segments[1].label);
+ok('F2: form variant has a single first return', fVar.form.point.bar === 6 && fVar.form.segments.filter((s) => s.label === 0).length === 2);
+ok('F2: generated answer passes formJudge', m.formJudge(fVar, { labels: fVar.form.answer.labels, point: fVar.form.answer.point }).length === 0);
+ok('F2: wrong labels are rejected', m.formJudge(fVar, { labels: { 0: 1, 1: 0, 2: 0 }, point: 6 }).length > 0);
+ok('F2: wrong return point is rejected', m.formJudge(fVar, { labels: fVar.form.answer.labels, point: 4 }).length > 0);
+ok('F2: original form room is untouched', formRoom.form.point.bar !== 6 || formRoom.form.segments.length === 2);
+
+['r-cp1', 'r-func', 'r-theme', 'r-normal'].forEach(function (id) {
+  const room = playable.find((r) => r.id === id);
+  const v = m.makeVariant(room, 2);
+  ok('S2: ' + id + ' can offer a variant', m.variantSupports(room) === true);
+  ok('S2: ' + id + ' variant differs from the original', JSON.stringify(v.form || v.target || v.members || v.situations || v.variantLevel || v.compass) !== JSON.stringify(room.form || room.target || room.members || room.situations || room.variantLevel || room.compass));
+  ok('S2: ' + id + ' has a prediction', !!m.predictFor(room));
+  ok('S2: ' + id + ' has an actual-result source', m.predictActual(room) !== null || room.kind === 'harmony');
+});
+ok('S2: skipping prediction is recorded without blocking', src.indexOf('skipped: true') !== -1);
+ok('S2: failure path keeps the retry action', src.indexOf('function formSubmit') !== -1);
+ok('S2: transfer still needs the cross slot', src.indexOf("masteryAfterPass(before, ev, slot === 'cross')") !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

@@ -6042,7 +6042,31 @@ function cpLevelOf(room) {
 }
 
 function variantSupports(room) {
-  return !!room && (room.kind === 'scale' || room.kind === 'compass' || room.kind === 'counterpoint' || room.kind === 'harmony' || room.kind === 'set');
+  return !!room && (room.kind === 'scale' || room.kind === 'compass' || room.kind === 'counterpoint' || room.kind === 'harmony' || room.kind === 'set' || room.kind === 'form');
+}
+
+// 曲式变式：用原房间的小节材料拼 A–B–A，首个回归点唯一，答案由结构数据生成
+function makeFormStructureVariant(room) {
+  var f = room.form;
+  if (!f || !f.bars || f.bars.length < 8 || f.mode !== 'segment') return null;
+  var bars = f.bars.slice(0, 4).concat(f.bars.slice(4, 6)).concat(f.bars.slice(0, 2));
+  var segments = [
+    { from: 0, to: 3, label: 0, why: '前四小节是 A：开头的乐思原样出现。' },
+    { from: 4, to: 5, label: 1, why: '第五、六小节是 B：换材料，离开开头。' },
+    { from: 6, to: 7, label: 0, why: '第七小节开始 A 原样回来，这是全曲第一次回归。' }
+  ];
+  return {
+    tempo: f.tempo,
+    mode: 'segment',
+    bars: bars,
+    segments: segments,
+    labels: [
+      { name: 'A 段', desc: '开头的乐思' },
+      { name: 'B 段', desc: '换材料的一段' }
+    ],
+    point: { bar: 6, name: '第一次回归', why: '第 7 小节起是开头材料原样回来，前面没有别的回归。' },
+    answer: { labels: { 0: 0, 1: 1, 2: 0 }, point: 6 }
+  };
 }
 
 function makeVariant(room, shift) {
@@ -6089,6 +6113,15 @@ function makeVariant(room, shift) {
     if (c.guide) {
       c.guide = JSON.parse(JSON.stringify(room.guide));
       c.guide.goal = room.guide.goal + '（变式：整条进行整体上移 ' + shift + ' 个半音）';
+    }
+  } else if (c.kind === 'form') {
+    var fv = makeFormStructureVariant(room);
+    if (!fv) return room;
+    c.form = fv;
+    if (c.guide) {
+      c.guide = JSON.parse(JSON.stringify(room.guide));
+      c.guide.goal = '这一段是 A–B–A：标出三段、并点出第一次回归落在哪一小节。';
+      c.guide.done = '三段分别标成 A、B、A，回归点在第 7 小节。';
     }
   } else if (c.kind === 'set') {
     c.members = room.members.map(function (pc) { return (pc + shift) % 12; });
@@ -6435,6 +6468,7 @@ if (typeof module !== 'undefined' && module.exports) {
     roomResultSummary: roomResultSummary, roomLearnPoint: roomLearnPoint, roomPlayableIndex: roomPlayableIndex,
     makeVariant: makeVariant, variantSupports: variantSupports, variantRoom: variantRoom, VARIANT_SHIFT: VARIANT_SHIFT,
     SLICE_ROOMS: SLICE_ROOMS, PREDICT_DEFS: PREDICT_DEFS, predictFor: predictFor, predictActual: predictActual,
+    makeFormStructureVariant: makeFormStructureVariant, formJudge: formJudge,
     predictFeedback: predictFeedback, localCompareText: localCompareText, explainLevels: explainLevels,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
