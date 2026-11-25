@@ -1067,5 +1067,33 @@
       "生产 URL（需合并 PR #5）"
     ],
     "tests": "722 passed / 0 failed"
+  },
+  "pr5Recheck2026_11_25": {
+    "baseline": {
+      "branch_head": "efd0f6da44e04940b992681cf7d9fba5603acc08",
+      "main": "c11dd32",
+      "remote_same": true,
+      "worktree": "clean",
+      "main_only_overlap": []
+    },
+    "A_confirmed": [
+      "热区 1280：节点圆心命中 quarry，化身中心命中 svg（穿透），节点 aria-label「采石场，已完成 0 / 5」、role=button、tabindex=0",
+      "热区 768：节点圆心 quarry、化身中心 svg、页面溢出 0",
+      "热区 390：节点圆心 quarry、化身中心 svg；真实点击节点后 state.district=quarry",
+      "下一关真实点击（上一轮）：btn-ink 点击后进 r-meter，cleared/mastery 写入 localStorage",
+      "下一关边界：重复通关同一间不改变下一关；已完成的房被跳过（倒数第二间 → r-doowop）；末间标签「回到环城」"
+    ],
+    "B_statePipeline": [
+      "键盘 Enter/Space：节点可聚焦、keydown 处理已注册，browser_press_key 仍 502，真实按键未验证",
+      "房间正文区点击仍 502（骨架试听按钮、作答控件）"
+    ],
+    "C_unverified": [
+      "真实手机（360/390/412 真机）",
+      "打印分页",
+      "生产 URL（PR #5 未合并）",
+      "19 间真实指针闭环",
+      "五项人耳听检"
+    ],
+    "tests": "722 passed / 0 failed"
   }
 }
