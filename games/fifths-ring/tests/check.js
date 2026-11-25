@@ -783,8 +783,8 @@ const scaleVerdict = (function () {
 ok('V: variant target is a full set', scaleVerdict);
 ok('V: variant stays inside the ring', vScale.target.pcs.every((pc) => pc >= 0 && pc < 12));
 
-const vCpRoom = playable.find((r) => r.kind === 'counterpoint');
-ok('V: counterpoint is not faked as a variant', m.variantSupports(vCpRoom) === false && m.makeVariant(vCpRoom, 2) === vCpRoom);
+const vCpPlain = playable.find((r) => r.kind === 'counterpoint');
+ok('V: counterpoint variant keeps its own data', m.variantSupports(vCpPlain) === true && !!m.makeVariant(vCpPlain, 2).variantLevel);
 const vCompassRoom = playable.find((r) => r.kind === 'compass');
 const vCompass = m.makeVariant(vCompassRoom, 2);
 ok('V: compass variant transposes both keys',
@@ -810,6 +810,90 @@ ok('A: mute is not blamed on CDN', src.indexOf('不是音频文件加载失败�
 ok('A: technical-state lead appears only after a test tone', src.indexOf('var technoOk = !!c.lastTestAt && c.state !== \'unsupported\';') !== -1);
 ok('A: heard feedback buttons are kept', src.indexOf("'我听到了'") !== -1 && src.indexOf("'没听到'") !== -1);
 ok('A: diagnosis summary is still available', src.indexOf("'复制诊断'") !== -1);
+
+/* ---------- 26. 体验切片：预测 / 局部对照 / 分级解释 ---------- */
+ok('S: four slice rooms are defined', m.SLICE_ROOMS.length === 4);
+['r-cp1', 'r-func', 'r-theme', 'r-normal'].forEach(function (id) {
+  ok('S: ' + id + ' has a prediction', !!m.predictFor({ id: id }));
+});
+ok('S: prediction has options', m.predictFor({ id: 'r-cp1' }).options.length >= 2);
+ok('S: skipped prediction is allowed', src.indexOf('function skipPredict') !== -1 && src.indexOf('跳过预测') !== -1);
+ok('S: prediction does not block the room', src.indexOf('if (pdef && !room.isVariant)') !== -1);
+ok('S: prediction is saved with progress', src.indexOf('state.predict') !== -1);
+
+const cpPredict = m.predictActual({ id: 'r-cp1', kind: 'counterpoint', cp: 0 });
+ok('S: counterpoint actual comes from the judge', /第一处|没有违例/.test(cpPredict.text), cpPredict.text);
+const setPredict = m.predictActual({ id: 'r-normal', kind: 'set', mode: 'normal', members: [0, 4, 7] });
+ok('S: set actual counts real members', setPredict.id === '2', JSON.stringify(setPredict));
+
+// 局部对照：四种类型都有各自的内容
+const cpCmp = m.localCompareText({ id: 'r-cp1', kind: 'counterpoint', cp: 0 }, { slot: 3 });
+ok('S: counterpoint comparison names the slot', /第 4 音/.test(cpCmp.where), JSON.stringify(cpCmp));
+ok('S: counterpoint comparison is local, not the whole answer', cpCmp.mine.split('→').length === 2 && cpCmp.ref.split('→').length === 2);
+
+// 分级解释：先人话，规则可展开
+ok('S: explanation has three levels', /plain/.test(src) && /rule/.test(src) && /cite/.test(src));
+ok('S: rules are collapsed by default', src.indexOf('展开规则与出处') !== -1);
+ok('S: expanding is remembered per room', src.indexOf('state.explainOpen = true') !== -1);
+ok('S: compare button appears on failure', src.indexOf("'对照这一处'") !== -1);
+ok('S: compare resets when entering a room', src.indexOf('state.localCompare = false') !== -1);
+const markFn = src.slice(src.indexOf('function renderMarkList'), src.indexOf('function renderMarkList') + 2200);
+ok('S: compare line is rendered inside the mark list', markFn.indexOf('local-compare') !== -1);
+
+/* ---------- 27. 切片房变式有解 ---------- */
+const vCpBase = playable.find((r) => r.kind === 'counterpoint');
+const vCp = m.makeVariant(vCpBase, 2);
+ok('V2: counterpoint variant ships its own level', !!vCp.variantLevel);
+ok('V2: cantus is transposed', vCp.variantLevel.cantus[0] === m.LEVELS[vCpBase.cp].cantus[0] + 2);
+ok('V2: reference is transposed', vCp.variantLevel.reference[0] === m.LEVELS[vCpBase.cp].reference[0] + 2);
+ok('V2: shifted reference still passes the judge',
+  m.judge(vCp.variantLevel, vCp.variantLevel.reference).violations.length === 0);
+ok('V2: the original room keeps its own level', vCpBase.variantLevel === undefined);
+
+const vHarRoom = playable.find((r) => r.kind === 'harmony');
+const vHar = m.makeVariant(vHarRoom, 2);
+ok('V2: harmony variant shifts the tonic', vHar.tonic === (vHarRoom.tonic + 2) % 12);
+ok('V2: harmony variant keeps a legal answer', (function () {
+  return vHar.situations.every(function (s) {
+    return s.options.some(function (o) { return m.harmonyIssues(s.prev, o, vHar.tonic).length === 0; });
+  });
+})());
+
+const vSetRoom = playable.find((r) => r.kind === 'set');
+const vSet = m.makeVariant(vSetRoom, 2);
+ok('V2: set variant shifts the members', vSet.members.every((pc, i) => pc === (vSetRoom.members[i] + 2) % 12));
+ok('V2: set variant keeps the tightest span',
+  m.minSpanOf(vSet.members).span === m.minSpanOf(vSetRoom.members).span);
+
+ok('V2: slice rooms can offer a variant',
+  ['r-cp1', 'r-func', 'r-theme', 'r-normal'].filter(function (id) {
+    return m.variantSupports(playable.find(function (r) { return r.id === id; }));
+  }).length >= 3);
+
+/* ---------- 28. 曲式变式 + 四房 acceptance ---------- */
+const formRoom = playable.find((r) => r.id === 'r-theme');
+const fVar = m.makeVariant(formRoom, 2);
+ok('F2: form variant is generated', !!fVar.form && fVar.form !== formRoom.form);
+ok('F2: form variant is no longer than the original', fVar.form.bars.length <= formRoom.form.bars.length);
+ok('F2: form variant is A-B-A', fVar.form.segments[0].label === fVar.form.segments[2].label &&
+  fVar.form.segments[0].label !== fVar.form.segments[1].label);
+ok('F2: form variant has a single first return', fVar.form.point.bar === 6 && fVar.form.segments.filter((s) => s.label === 0).length === 2);
+ok('F2: generated answer passes formJudge', m.formJudge(fVar, { labels: fVar.form.answer.labels, point: fVar.form.answer.point }).length === 0);
+ok('F2: wrong labels are rejected', m.formJudge(fVar, { labels: { 0: 1, 1: 0, 2: 0 }, point: 6 }).length > 0);
+ok('F2: wrong return point is rejected', m.formJudge(fVar, { labels: fVar.form.answer.labels, point: 4 }).length > 0);
+ok('F2: original form room is untouched', formRoom.form.point.bar !== 6 || formRoom.form.segments.length === 2);
+
+['r-cp1', 'r-func', 'r-theme', 'r-normal'].forEach(function (id) {
+  const room = playable.find((r) => r.id === id);
+  const v = m.makeVariant(room, 2);
+  ok('S2: ' + id + ' can offer a variant', m.variantSupports(room) === true);
+  ok('S2: ' + id + ' variant differs from the original', JSON.stringify(v.form || v.target || v.members || v.situations || v.variantLevel || v.compass) !== JSON.stringify(room.form || room.target || room.members || room.situations || room.variantLevel || room.compass));
+  ok('S2: ' + id + ' has a prediction', !!m.predictFor(room));
+  ok('S2: ' + id + ' has an actual-result source', m.predictActual(room) !== null || room.kind === 'harmony');
+});
+ok('S2: skipping prediction is recorded without blocking', src.indexOf('skipped: true') !== -1);
+ok('S2: failure path keeps the retry action', src.indexOf('function formSubmit') !== -1);
+ok('S2: transfer still needs the cross slot', src.indexOf("masteryAfterPass(before, ev, slot === 'cross')") !== -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
