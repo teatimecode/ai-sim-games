@@ -26,5 +26,3 @@ python3 -m http.server 8000 --directory dist
 ```
 
 然后访问 <http://localhost:8000/>。构建产物 `dist/` 不提交到 Git，由 GitHub Actions 直接上传到 GitHub Pages。仓库 Pages 的 **Source** 需要设置为 **GitHub Actions**。
-
-浏览器模拟经营游戏合集。每个游戏独立目录、独立运行，无需前端依赖安装。

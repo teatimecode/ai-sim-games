@@ -269,7 +269,7 @@
       progress: 0,
       engines: 0,
       engineOrders: [],
-      pending: { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [] },
+      pending: { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [], enginesCost: 0, engineUnit: 0.35 },
       lastReport: null,
       flags: {}
     };
@@ -415,10 +415,13 @@
     return { ok: true };
   }
   function buyEngines(s, qty) {
-    const cost = qty * (s.enginePrice || 0.35) * 0.30;
+    const unit = s.enginePrice || 0.35;          // 下单瞬间的单价
+    const cost = qty * unit * 0.30;
     if (s.cash < cost) return { ok: false, reason: '现金不足 ' + cost.toFixed(2) + ' 亿' };
     s.pending.engines += qty;
-    return { ok: true, cost: cost };
+    s.pending.enginesCost = (s.pending.enginesCost || 0) + cost;   // 价格快照
+    s.pending.engineUnit = unit;
+    return { ok: true, cost: cost, unit: unit };
   }
   function decideOffer(s, id, accept) {
     const o = s.offers.filter(function (x) { return x.id === id; })[0];
@@ -468,6 +471,70 @@
     s.eventWarn = up ? { title: up.title, text: up.warn } : null;
     const beat = BEATS.filter(function (x) { return x.turn === s.turn && (!x.when || x.when(s)); })[0];
     s.story = beat ? { id: beat.id, type: beat.type, title: beat.title, text: beat.text, note: beat.note, a: beat.a, b: beat.b } : null;
+  }
+
+
+  /* ---------- 助理引导：前三季的分步脚本（纯数据，可被 Node 断言） ---------- */
+  const ASSIST = {
+    name: '林工', role: '项目助理', initials: 'L',
+    steps: [
+      { id: 's1-hello', season: 1, at: 'turn', turn: 1,
+        text: '我是林工，这个型号的项目助理。从现在起我陪你走完前三季，之后你自己来。',
+        next: '先看右上角：现金、在手订单、已交付。这三个数字后面每季都会变。',
+        ops: [{ t: '知道了' }] },
+      { id: 's1-money', season: 1, at: 'turn', turn: 1,
+        text: '第一件事是钱。造飞机不靠自有资金，你只有 2 亿，研发每季烧 0.6 亿。',
+        next: '点右上「融资」选方案。政府基金给得多但绑了 25 架承诺；银行贷款少，没附加条件。',
+        ops: [{ t: '知道了' }] },
+      { id: 's1-assign', season: 1, at: 'finance', turn: 1,
+        text: '钱定了，接着派人。「技术流程」里五个部门产能不能互借，派到哪项工作就推进哪项。',
+        next: '看不懂派哪个？点「一键执行这 N 条」，它按关键路径排。派完再自己改也行。',
+        ops: [{ t: '去技术流程', tab: 'tech' }, { t: '知道了' }] },
+      { id: 's1-commit', season: 1, at: 'assign', turn: 1,
+        text: '派完就提交。提交后世界会结算，结果不可逆。',
+        next: '底部三个勾都亮起、右边显示本季产出预估，就可以点「提交本季」了。',
+        ops: [{ t: '知道了' }] },
+      { id: 's2-engine', season: 2, at: 'turn', turn: 2,
+        text: '第二季先说发动机。「采购」页锁件，下单到到货要三季，只能整批锁。',
+        next: '现在锁 24 台，第九季前后到货。晚两季锁，产线就会在交付期空转。',
+        ops: [{ t: '去采购', tab: 'buy' }, { t: '知道了' }] },
+      { id: 's2-path', season: 2, at: 'turn', turn: 2,
+        text: '看右侧「项目阶段」下面的关键路径：实心点现在就能动，空心点被前置挡着。',
+        next: '想验证自己的判断，点「预测未来 12 季」——它按现有产能推演，不追加投入。',
+        ops: [{ t: '知道了' }] },
+      { id: 's3-order', season: 3, at: 'turn', turn: 3,
+        text: '第三季会有第一家航司来问价。窗口和折扣比数量重要。',
+        next: '「商务」页能看到窗口、折扣、定金。接单前先看产能，别接超出交付能力的单。',
+        ops: [{ t: '去商务', tab: 'biz' }, { t: '知道了' }] },
+      { id: 's3-customer', season: 3, at: 'turn', turn: 3,
+        text: '客户不是抽象买家。「客户」页有它们的机队、关系、可靠性。',
+        next: '花 0.4 亿拜访一次，关系 +8；关系越好，下一单折扣越浅。交付后它们会给你打可靠性分。',
+        ops: [{ t: '去客户', tab: 'cust' }, { t: '知道了' }] },
+      { id: 's3-end', season: 3, at: 'turn', turn: 4,
+        text: '前三季到这儿。你手上应该有一张订单、一批在途发动机、一条在动的关键路径。',
+        next: '后面十二季我不再插话。卡住了点「规则」和图鉴；想重来点「重开」。',
+        ops: [{ t: '开始自己走' }] }
+    ]
+  };
+
+  function assistReady(s, step) {
+    if (!s) return false;
+    if (step.at === 'turn') return s.turn >= step.turn;
+    if (step.at === 'finance') return !!s.finance;
+    if (step.at === 'finance') return !!s.finance || s.turn > step.turn;
+    if (step.at === 'assign') return Object.keys(s.pending.assign || {}).length > 0;
+    return false;
+  }
+  /** 返回当前应展示的步骤（跳过已看过的、条件未满足的）；无则 null */
+  function nextAssistStep(s, seen) {
+    const done = seen || [];
+    for (let i = 0; i < ASSIST.steps.length; i += 1) {
+      const st = ASSIST.steps[i];
+      if (done.indexOf(st.id) >= 0) continue;
+      if (!assistReady(s, st)) return null;
+      return st;
+    }
+    return null;
   }
 
   /* ---------- 决策辅助：关键路径、自动派工、预测 ---------- */
@@ -651,7 +718,8 @@
 
   /* ---------- 结算 ---------- */
   function commit(s) {
-    const r = { turn: s.turn, lines: [], notes: [], events: [], penalties: [], attribution: null };
+    const cashStart = s.cash;
+    const r = { turn: s.turn, cashStart: cashStart, lines: [], notes: [], events: [], penalties: [], attribution: null };
     const p = s.pending;
     const t = s.turn;
 
@@ -704,9 +772,9 @@
     }
 
     if (p.engines > 0) {
-      const c = p.engines * 0.35 * 0.30;
+      const c = p.enginesCost != null ? p.enginesCost : p.engines * (s.enginePrice || 0.35) * 0.30;
       s.cash -= c;
-      s.engineOrders.push({ arrive: t + 3, qty: p.engines });
+      s.engineOrders.push({ arrive: t + 3, qty: p.engines, unit: p.engineUnit || s.enginePrice || 0.35 });
       r.lines.push({ k: '锁定发动机 ' + p.engines + ' 台（30% 预付）', v: -c });
       r.notes.push(p.engines + ' 台发动机将在第 ' + (t + 3) + ' 季到货。');
     }
@@ -939,7 +1007,6 @@
       }
     });
 
-    r.cashStart = r.cashStart === undefined ? s.cash : r.cashStart;
     r.cashEnd = s.cash;
     r.deliveredTotal = s.delivered;
     r.capacity = cap;
@@ -951,7 +1018,7 @@
     s.log.push(r);
 
     s.turn = t + 1;
-    s.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [] };
+    s.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [], release: 0, extra: false, story: null, visits: [], enginesCost: 0, engineUnit: 0.35 };
     s.offers.forEach(function (o) { if (o.turn === s.turn) o.open = true; });
     s.offers.forEach(function (o) { if (o.open && !o.decided && s.turn - o.turn > 3) o.decided = 'expired'; });
     if (s.turn <= CONFIG.maxTurn) applyTurnStart(s);
@@ -987,7 +1054,7 @@
 
   const api = {
     CONFIG: CONFIG, DEPTS: DEPTS, WORKS: WORKS, GATES: GATES, OFFERS: OFFERS, EVENT_POOL: EVENT_POOL, BEATS: BEATS, needOf: needOf,
-    ROCKET: ROCKET, rocketCalc: rocketCalc, rocketBreakEven: rocketBreakEven,
+    ROCKET: ROCKET, rocketCalc: rocketCalc, rocketBreakEven: rocketBreakEven, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
     newGame: newGame, applyTurnStart: applyTurnStart,
     capacity: capacity, effectiveCycle: effectiveCycle, unitCost: unitCost,
     slotPrice: slotPrice, slotPrice2: slotPrice2,

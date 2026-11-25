@@ -180,6 +180,70 @@ E.decideOffer(v3, 'alt', true);
 E.commit(v3);
 assert(discHigh < v3.slots[0].disc, '关系好应拿到更浅的折扣');
 
+/* --- P0-A 经济正确性 --- */
+const econ = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+E.setFinance(econ, 'gov');
+const er = E.commit(econ);
+assert(er.cashStart === 2.0, 'cashStart 应为提交前现金 2.0，实际 ' + er.cashStart);
+assert(er.cashEnd === er.cashStart + 11.0 - 0.7 - 0.06, '季报终值应等于 起点+融资-研发-利息，实际 ' + er.cashEnd);
+assert(Math.abs(er.cashEnd - econ.cash) < 1e-9, 'cashEnd 必须等于结算后的真实现金');
+
+const snap = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+E.setFinance(snap, 'gov');
+E.buyEngines(snap, 12);
+const quoted = snap.pending.enginesCost;
+snap.enginePrice = 0.385;                 // 下单后涨价事件
+E.commit(snap);
+assert(Math.abs(quoted - 12 * 0.35 * 0.30) < 1e-9, '下单时单价快照应为 0.35');
+assert(snap.engineOrders[0].unit === 0.35, '在途订单单价应锁定 0.35，实际 ' + snap.engineOrders[0].unit);
+
+const deriv = E.newGame({ seed: 20260419, seat: 'main', route: 'derivative' });
+assert(deriv.needs.d3 === 2 && deriv.needs.t1 === 2 && deriv.needs.f2 === 1, '改型路线应下调三项工作量');
+assert(deriv.rdRate < 0.6, '改型路线研发应更便宜');
+
+const done = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+E.setFinance(done, 'gov');
+done.pending.assign = { d3: 3 };
+const dr = E.commit(done);
+assert(dr.notes.some((n) => n.indexOf('系统布置与数字样机') >= 0), '完成工作项应写入 doneNow 记录');
+
+/* --- 助理折叠与资源探测（源码契约断言） --- */
+const uiSrc = readFileSync(resolve(ROOT, 'ui.js'), 'utf8');
+const htmlSrc = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
+const cssSrc = readFileSync(resolve(ROOT, 'game.css'), 'utf8');
+assert(/collapsed:\s*true/.test(uiSrc), '助理应默认折叠');
+assert(uiSrc.indexOf("op === 'expand'") >= 0 && uiSrc.indexOf("op === 'collapse'") >= 0, '应支持展开与收起');
+assert(uiSrc.indexOf('probeAssets') >= 0 && uiSrc.indexOf('ASSET_OK') >= 0, '应有资源探测，缺失时不请求图片');
+assert(htmlSrc.indexOf('assisthost') >= 0, '页面应挂载助理容器');
+assert(htmlSrc.indexOf('data-preview') >= 0, '底栏应有结算预览入口');
+assert(cssSrc.indexOf('.assist-chip') >= 0, '折叠态样式应存在');
+
+/* --- 助理引导 --- */
+assert(E.ASSIST && E.ASSIST.steps.length >= 8, '助理脚本应有 8 步以上，实际 ' + (E.ASSIST.steps || []).length);
+assert(E.ASSIST.steps.every((x) => x.ops.length <= 2), '每步只给不超过两个选择');
+const walk = E.newGame({ seed: 20260419 });
+const seenIds = [];
+let guard = 0;
+while (guard++ < 30) {
+  const st = E.nextAssistStep(walk, seenIds);
+  if (!st) break;
+  seenIds.push(st.id);
+  if (st.id === 's1-money') walk.finance = 'gov';
+  if (st.id === 's1-assign') walk.pending.assign = { d3: 1 };
+  if (st.id === 's1-commit') { walk.pending.assign = {}; walk.turn = 2; }
+  if (st.id === 's2-path') walk.turn = 3;
+  if (st.id === 's3-customer') walk.turn = 4;
+}
+assert(seenIds.length === E.ASSIST.steps.length, '助理九步应可全部走完（无死循环），实际 ' + seenIds.length);
+assert(E.nextAssistStep(walk, seenIds) === null, '走完后不应再有步骤');
+
+/* --- 图片资源契约 --- */
+const assetsDir = resolve(ROOT, 'assets');
+assert(existsSync(resolve(assetsDir, 'README.md')), '缺少 assets/README.md 资源契约');
+const spec = readFileSync(resolve(assetsDir, 'README.md'), 'utf8');
+['prologue-yard.jpg', 'prologue-shop.jpg', 'prologue-notebook.jpg', 'prologue-board.jpg', 'prologue-runway.jpg', 'assistant.jpg']
+  .forEach((n) => assert(spec.indexOf(n) >= 0, '资源契约缺少 ' + n));
+
 /* --- 航天切片 --- */
 const re = E.rocketCalc('reusable');
 const ex = E.rocketCalc('expendable');
@@ -218,7 +282,7 @@ if (!existsSync(evidencePath)) {
   if (obs.restart && obs.restart.state) {
     assert(obs.restart.state.turn === 1 && obs.restart.state.delivered === 0, '实机重开未回到初态');
   }
-  ['01-tech', '04-ending', '05-restart', '11-ui-1280x720', '12-ui-900', '13-ui-430', '14-customer', '15-rocket'].forEach((n) => {
+  ['01-tech', '04-ending', '05-restart', '11-ui-1280x720', '14-customer', '15-rocket', '16-assistant-1440', '17-assistant-430'].forEach((n) => {
     const p = resolve(ROOT, 'qa/evidence/' + n + '.png');
     assert(existsSync(p) && statSync(p).size > 10000, '缺少实机截图 ' + n + '.png');
   });

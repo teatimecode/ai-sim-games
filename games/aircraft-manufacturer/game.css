@@ -420,3 +420,65 @@ button{font-family:inherit;color:inherit;background:none;border:0;cursor:pointer
 .cust .cbar i{position:absolute;left:0;top:0;height:4px;background:var(--teal)}
 .note{font-size:10.5px;line-height:1.6;color:var(--ink-55);border-left:2px solid var(--amber);padding:4px 8px;background:rgba(176,112,28,.05);margin-bottom:8px}
 .echoline{margin-top:6px;padding-top:5px;border-top:1px dotted var(--ink-20);font-size:9px;color:var(--ink-40);line-height:1.5}
+
+/* 项目助理 */
+.assisthost{position:fixed;left:18px;bottom:76px;z-index:70;max-width:480px}
+.assist{display:flex;gap:9px;align-items:flex-start}
+.avatar{width:46px;height:46px;flex:0 0 46px;border:1px solid var(--ink);background:#EFE9DB;overflow:hidden;position:relative}
+.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.8) sepia(.1)}
+.avatar svg{position:relative;display:block}
+.abubble{max-width:360px;max-height:44vh;overflow:auto;background:var(--panel2);border:1px solid var(--ink);box-shadow:0 8px 24px rgba(22,34,43,.16);padding:9px 11px 8px;position:relative}
+.abubble::before{content:"";position:absolute;left:-6px;top:14px;width:10px;height:10px;background:var(--panel2);border-left:1px solid var(--ink);border-bottom:1px solid var(--ink);transform:rotate(45deg)}
+.awho{display:flex;align-items:baseline;gap:7px;margin-bottom:4px}
+.awho b{font-size:11px}
+.awho em{font-style:normal;font-size:9px;color:var(--ink-40);letter-spacing:.06em}
+.atext{font-size:11px;line-height:1.6;color:var(--ink)}
+.anext{font-size:10px;line-height:1.55;color:var(--ink-55);margin-top:4px;padding-left:8px;border-left:2px solid var(--amber)}
+.aops{display:flex;flex-direction:column;gap:4px;margin-top:7px;align-items:stretch}
+.abtn{font-size:10px;padding:4px 10px;border:1px solid var(--ink-20);color:var(--ink-55);background:var(--panel);white-space:nowrap;line-height:1.4;text-align:left;width:100%}
+.abtn:hover{border-color:var(--ink);color:var(--ink)}
+.abtn.main{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.abtn.ghost{border-color:transparent;color:var(--ink-40);padding-left:2px;width:auto}
+.alogitem{border-bottom:1px dotted var(--ink-20);padding:6px 0}
+.alogitem b{display:block;font-size:11px;font-weight:500}
+.alogitem span{font-size:10px;color:var(--ink-55)}
+@media (max-width:720px){
+  .assisthost{left:8px;right:8px;bottom:64px;max-width:none}
+  .avatar{width:38px;height:38px;flex:0 0 38px}
+  .atext{font-size:10.5px}
+}
+
+/* 主指挥条 */
+.hintbar.lead{border-left:3px solid var(--ink);background:rgba(22,34,43,.06);color:var(--ink);font-size:11px}
+.hintbar.lead b{letter-spacing:.14em;margin-right:8px;color:var(--ink-40);font-weight:400}
+/* 必做/考虑 */
+.guide .gh.sub{margin-top:6px;color:var(--ink-40)}
+.gitem.must .gtext b{color:var(--ink)}
+.gitem.sub{opacity:.85}
+.gitem.sub .gtext b{font-weight:400}
+/* 新手目标可点 */
+button.ti{font:inherit;font-size:10.5px;color:var(--ink-55);background:none;border:0;padding:0;cursor:pointer;text-align:left}
+button.ti:hover{color:var(--ink);text-decoration:underline}
+/* 订单可行性 */
+.ofeas{display:flex;flex-wrap:wrap;gap:5px 12px;align-items:center;margin-top:6px;font-size:9.5px;color:var(--ink-55);
+  border-top:1px dotted var(--ink-20);padding-top:5px}
+.ofeas b{font-family:var(--mono);color:var(--ink);font-weight:500}
+.ofeas em{font-style:normal;margin-left:auto;padding:1px 6px;border:1px solid;font-size:9px;letter-spacing:.06em}
+.ofeas.safe em{border-color:var(--teal);color:var(--teal)}
+.ofeas.tight em{border-color:var(--amber);color:var(--amber)}
+.ofeas.bad em{border-color:var(--red);color:var(--red)}
+.preview{border-color:var(--ink-20);color:var(--ink-55)}
+
+/* 折叠态头像气泡 */
+.assist-chip{display:inline-flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;border:1px solid var(--ink);
+  background:var(--panel2);box-shadow:0 6px 18px rgba(22,34,43,.18);cursor:pointer}
+.assist-chip:hover{background:#F3EEE1}
+.chipavatar{width:28px;height:28px;flex:0 0 28px;border:1px solid var(--ink-20);overflow:hidden;display:block}
+.chipavatar svg{display:block}
+.chipn{font-size:10.5px;letter-spacing:.04em}
+.chipdot{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.aops2{display:flex;gap:8px;margin-top:2px}
+@media (max-width:720px){
+  .assisthost{left:8px;right:8px;bottom:70px;max-width:none}
+  .abubble{max-width:none;max-height:40vh}
+}
