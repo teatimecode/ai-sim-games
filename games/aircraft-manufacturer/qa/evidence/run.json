@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "3aa74e02deab6e61",
+  "buildHash": "595f453d6209bed8",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
-  "startedAt": "2026-11-26T10:00:00Z",
+  "startedAt": "2026-11-27T09:00:00Z",
   "inputTrace": [
     {
       "step": 1,
@@ -209,7 +209,13 @@
           "cashStart snapshot",
           "engine price snapshot"
         ],
-        "teaching": "主指挥条 + 1 必做 + 结算预览"
+        "teaching": "主指挥条 + 1 必做 + 结算预览",
+        "phase2": [
+          "maturity",
+          "config-templates",
+          "delivery-feedback",
+          "forecast/review/ledger"
+        ]
       }
     },
     "outcome": {

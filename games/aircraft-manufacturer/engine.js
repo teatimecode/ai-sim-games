@@ -26,6 +26,19 @@
     atDelivery: 0.50,
     tailRate: 0.10,
     qualityFloor: 55,
+    /* Phase 2：量产成熟度（可调） */
+    maturityStart: 70,
+    maturityFloor: 35,
+    maturityReworkCap: 0.30,      // 最低成熟度时的产能损失比例
+    maturityGainPerQuarter: 2,    // 每季自然回升
+    maturityGainPerDelivery: 1,   // 每交付一架的工艺沉淀
+    maturityWarnAt: 60,           // 低于此值提前预警
+    maturityIssueAt: 50,          // 低于此值开始出现交付检查不合格
+    processCost: 1.2,             // 工艺改进花费
+    processGain: 10,              // 工艺改进提升
+    processCooldown: 3,           // 冷却季数
+    configLoadCap: 0.06,          // 每单配置对产能的额外压力
+
     reworkFactor: 0.9
   };
 
@@ -83,7 +96,7 @@
       note: '首单。它买的是你的信用，不是你的价钱。' },
     { turn: 6, id: 'trx', cust: '横跨航空', tag: '新兴市场 · 高速扩张', qty: 8, win: [12, 16], disc: 0.15,
       note: '量大但窗口紧，融资也脆。' },
-    { turn: 8, id: 'blb', cust: '蓝湾航空', tag: '低成本 · 单一机型', qty: 10, win: [13, 18], disc: 0.18,
+    { turn: 8, id: 'blb', cust: '蓝湾航空', tag: '低成本 · 单一机型', qty: 10, win: [13, 18], disc: 0.18, config: 'hl',
       note: '能摊薄固定成本，但压价很狠。' },
     { turn: 10, id: 'ocn', cust: '远洋租机', tag: '经营租赁', qty: 6, win: [14, 18], disc: 0.22,
       note: '它买的是机位，不是飞机。折扣最深。' }
@@ -208,6 +221,11 @@
   }
   function eventById(id) { return EVENT_POOL.filter(function (e) { return e.id === id; })[0]; }
 
+  const CONFIG_TPL = {
+    std: { n: '标准通用', disc: 0, shift: 0, load: 0, note: '标准客舱与系统配置，无额外制造压力' },
+    hl:  { n: '高频低成本', disc: 0.02, shift: -1, load: 1, note: '高密度客舱、短周转：折扣更深、窗口前移一季、产线压力 +1' }
+  };
+
   function L(n) { return Math.max(0.45, Math.pow(n, -0.2345)); }
 
   function newGame(opts) {
@@ -235,6 +253,10 @@
       echoFlags: {},
       ledger: [],
       ledgerStartCash: CONFIG.startCash,
+      maturity: CONFIG.maturityStart,
+      processCooldown: 0,
+      configLoad: 0,
+      feedback: [],
       airlines: {
         '高原航空': { key: 'alt', fleet: 12, got: 0, rel: 50, rel9: null, note: '高原支线的老牌网络航司，机队正在换喷气' },
         '横跨航空': { key: 'trx', fleet: 8, got: 0, rel: 45, rel9: null, note: '新兴市场高速扩张，融资最脆弱' },
@@ -448,6 +470,14 @@
   }
   function setExtra(s, on) { s.pending.extra = !!on; }
 
+  function requestProcess(s) {
+    if (!s.pc) return { ok: false, reason: 'PC 之前谈不产量产成熟度' };
+    if (s.processCooldown > s.turn) return { ok: false, reason: '工艺改进冷却中，第 ' + s.processCooldown + ' 季后可再做' };
+    if (s.cash < CONFIG.processCost) return { ok: false, reason: '现金不足 ' + CONFIG.processCost + ' 亿' };
+    s.pending.process = true;
+    return { ok: true, cost: CONFIG.processCost };
+  }
+
   function visitAirline(s, name) {
     const a = s.airlines[name];
     if (!a) return { ok: false, reason: '没有这个客户' };
@@ -636,7 +666,7 @@
     return {
       fromTurn: s.turn, horizon: h,
       tc: tc, pc: pc, firstDelivery: firstDel,
-      minCash: minCash, delivered: c.delivered,
+      minCash: minCash, delivered: c.delivered, maturity: c.maturity,
       ending: c.ending ? c.ending.id : null
     };
   }
@@ -772,6 +802,11 @@
     const backlog = activeSlots(s).length;
     items.push({ k: '订单', v: backlog + ' 架在手',
       why: r.deliveredTotal ? '累计交付 ' + r.deliveredTotal + ' 架' : '尚未开始交付', src: 'slots / deliveredTotal' });
+    if (s.pc) {
+      items.push({ k: '量产成熟度', v: String(s.maturity),
+        why: s.maturity < CONFIG.maturityWarnAt ? '返工压力偏大，考虑工艺改进' : '产线状态稳定',
+        src: 'maturity' });
+    }
     const g = nextGate(s);
     let next = '五道门已全部通过，接下来盯产能与发动机。';
     if (g) {
@@ -796,6 +831,7 @@
       if (o) acts.push('接单 ' + o.cust + ' ' + o.qty + ' 架');
     });
     if (p.overtime) acts.push('加班提产');
+    if (p.process) acts.push('工艺改进');
     if (storyPick && s.story) acts.push('抉择「' + s.story.title + '」');
     if (acts.length) s.ledger.push({ turn: t, acts: acts.slice(0, 3) });
   }
@@ -901,6 +937,14 @@
       p.release = 0;
       r.lines.push({ k: '机位转租 ×' + n + '（收预付款）', v: cashIn });
     }
+    if (p.process) {
+      s.cash -= CONFIG.processCost;
+      s.maturity = Math.min(100, s.maturity + CONFIG.processGain);
+      s.processCooldown = t + CONFIG.processCooldown;
+      r.lines.push({ k: '工艺改进（成熟度 +' + CONFIG.processGain + '）', v: -CONFIG.processCost });
+      r.notes.push('工艺改进落地：成熟度升到 ' + s.maturity + '，返工压力下降。');
+    }
+
     if (p.overtime) {
       s.cash -= 0.12; s.quality -= 6;
       r.lines.push({ k: '加班提产', v: -0.12 });
@@ -913,11 +957,13 @@
       if (!o) return;
       const relA = s.airlines[o.cust];
       const relBonus = relA ? Math.max(0, (relA.rel - 50)) / 100 * 0.03 : 0;
-      const disc = Math.min(0.30, Math.max(0.05, o.disc + s.discShift - relBonus));
+      const tpl = CONFIG_TPL[o.config || 'std'] || CONFIG_TPL.std;
+      const disc = Math.min(0.30, Math.max(0.05, o.disc + s.discShift - relBonus + tpl.disc));
+      s.configLoad += tpl.load;
       const a = o.win[0], b = o.win[1];
       const qty = Math.max(4, Math.round(o.qty * (s.qtyScale || 1)));
       for (let i = 0; i < qty; i += 1) {
-        const plan = a + Math.floor((i * (b - a + 1)) / o.qty);
+        const plan = Math.max(1, a + Math.floor((i * (b - a + 1)) / o.qty) + tpl.shift);
         s.slots.push({ id: s.nextSlot++, cust: o.cust, plan: plan, disc: disc, got: null, alive: true, pdp: 0, released: false });
       }
       const dep = qty * CONFIG.price * (1 - disc) * CONFIG.deposit;
@@ -1030,6 +1076,14 @@
     if (s.stopTurn === t) cap *= 0.55;
     if (s.capPenalty && s.capPenalty < 1) cap *= s.capPenalty;
     if (s.quality < CONFIG.qualityFloor) cap *= CONFIG.reworkFactor;
+    // Phase 2：量产成熟度只在 PC 之后影响产能，与 quality 独立
+    let maturityLoss = 0;
+    if (s.pc) {
+      const gap = Math.max(0, (100 - s.maturity) / 100);
+      maturityLoss = gap * CONFIG.maturityReworkCap;
+      cap *= (1 - maturityLoss);
+      if (s.configLoad > 0) cap *= (1 - Math.min(CONFIG.configLoadCap, s.configLoad * 0.02));
+    }
 
     let deliver = 0;
     const matAvail = Math.floor(s.engines / 2);
@@ -1065,10 +1119,27 @@
       s.tail.push({ at: t + 2, amount: pr * CONFIG.tailRate, cust: x.cust });
       x.got = t;
       s.delivered += 1;
-      if (s.airlines[x.cust]) s.airlines[x.cust].got += 1;
+      if (s.airlines[x.cust]) {
+        s.airlines[x.cust].got += 1;
+        const a = s.airlines[x.cust];
+        const score = Math.max(0, Math.min(100, Math.round(s.quality * 0.6 + s.maturity * 0.4)));
+        const good = score >= 70;
+        a.rel = Math.max(0, Math.min(100, a.rel + (good ? 2 : -2)));
+        s.feedback.push({ turn: t, cust: x.cust, score: score,
+          text: good ? '首架运行三个月，客舱与系统投诉低于预期。' : '首架运行三个月，返工项被记录，要求下批改进。' });
+      }
       if (x.plan >= t) s.rep = Math.min(100, s.rep + 2);
       else { lateCount += 1; s.rep -= 3; }
     }
+    if (s.pc && deliver > 0) {
+      if (s.maturity < CONFIG.maturityIssueAt && deliver > 0) {
+        deliver -= 1;
+        r.notes.push('交付检查不合格 1 架：成熟度 ' + s.maturity + ' 低于 ' + CONFIG.maturityIssueAt + '，返工后重检。');
+      }
+      s.maturity = Math.min(100, s.maturity + CONFIG.maturityGainPerDelivery * deliver);
+    }
+    if (s.pc) s.maturity = Math.min(100, s.maturity + CONFIG.maturityGainPerQuarter);
+
     if (deliver > 0) {
       s.engines -= deliver * 2;
       r.lines.push({ k: '交付 ' + deliver + ' 架（交付款 - 成本）', v: '见明细' });
@@ -1077,6 +1148,7 @@
           : s.quality < CONFIG.qualityFloor ? '本季上限由返工决定：质量低于 55，产能 ×0.9。'
             : '本季上限由工位节拍决定：' + Math.round(effectiveCycle(s)) + ' 天/架 × ' + s.k + ' 个总装位。')
         : '本季上限由发动机库存决定：可装 ' + matAvail + ' 架。';
+    } else if (!s.tc) {
     } else if (!s.tc) {
       const g = nextGate(s);
       r.attribution = '本季交付为 0：还没拿到型号合格证。当前卡在「' + (g ? g.n : '—') + '」。';
@@ -1168,8 +1240,9 @@
   }
 
   const api = {
+    CONFIG_TPL: CONFIG_TPL,
     CONFIG: CONFIG, DEPTS: DEPTS, WORKS: WORKS, GATES: GATES, OFFERS: OFFERS, EVENT_POOL: EVENT_POOL, BEATS: BEATS, needOf: needOf,
-    ROCKET: ROCKET, rocketCalc: rocketCalc, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
+    ROCKET: ROCKET, rocketCalc: rocketCalc, requestProcess: requestProcess, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
     newGame: newGame, applyTurnStart: applyTurnStart,
     capacity: capacity, effectiveCycle: effectiveCycle, unitCost: unitCost,
     slotPrice: slotPrice, slotPrice2: slotPrice2,
