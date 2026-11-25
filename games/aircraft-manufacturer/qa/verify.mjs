@@ -249,6 +249,36 @@ assert(typeof beforeDel === 'number', '历史交付计数不受反馈影响');
 const reinit = E.newGame({ seed: 20260419 });
 assert(reinit.maturity === E.CONFIG.maturityStart && reinit.feedback.length === 0 && reinit.configLoad === 0, '重开应清空 Phase 2 状态');
 
+/* --- Phase 2 质量门：低成熟度 + 双 hl 不得结构性必败 --- */
+function worstCase(doProcess) {
+  const w = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+  while (!w.ending && w.turn <= E.CONFIG.maxTurn) {
+    const t = w.turn;
+    if (t === 1) E.setFinance(w, 'gov');
+    if (t === 2) E.buyEngines(w, 24);
+    if (t === 3) w.offers.forEach((o) => { if (o.open && o.id === 'alt') E.decideOffer(w, o.id, true); });
+    if (t === 4) { E.requestExpand(w); E.requestHire(w, 'design'); E.requestHire(w, 'mfg'); }
+    if (t === 5) { E.requestHire(w, 'test'); E.requestHire(w, 'cert'); }
+    if (t === 6) E.buyEngines(w, 48);
+    if (t === 7) E.requestHire(w, 'flight');
+    if (t === 8) w.offers.forEach((o) => { if (o.open && o.id === 'blb') E.decideOffer(w, o.id, true); });
+    if (t === 10) w.offers.forEach((o) => { if (o.open && o.id === 'ocn') E.decideOffer(w, o.id, true); });
+    if (t === 11) E.buyEngines(w, 48);
+    w.offers.forEach((o) => { o.config = 'hl'; });
+    if (w.pc && w.turn === w.pc + 1) w.maturity = E.CONFIG.maturityFloor;
+    if (doProcess && t === 14) E.requestProcess(w);
+    E.autoAssign(w);
+    E.commit(w);
+  }
+  return w;
+}
+const wc = worstCase(false);
+assert(wc.delivered >= 25, '低成熟度 + 双 hl 仍应交付 ≥25 架，实际 ' + wc.delivered);
+assert(wc.ending.id !== 'bankrupt' && wc.ending.id !== 'fail', '低成熟度 + 双 hl 不应结构性必败，实际 ' + wc.ending.id);
+assert(wc.maturity > E.CONFIG.maturityFloor, '低成熟度应能自然回升，实际 ' + wc.maturity);
+const wc2 = worstCase(true);
+assert(wc2.maturity > wc.maturity, '工艺改进应比不改进成熟度更高');
+
 /* --- Phase 1：预览 / 复盘 / 账本 / 证据 --- */
 const pv = E.newGame({ seed: 20260419 });
 E.setFinance(pv, 'gov'); E.commit(pv);

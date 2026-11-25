@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "595f453d6209bed8",
+  "buildHash": "db9cf497d6fcaa03",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
   "startedAt": "2026-11-27T09:00:00Z",
   "inputTrace": [
@@ -107,11 +107,12 @@
         "screenshot 1440x900"
       ],
       "state": {
-        "visual": "qa/evidence/16-assistant-1440.png",
+        "visual": "qa/evidence/22-review-1440.png",
         "extraVisuals": [
-          "qa/evidence/18-preview-1440.png",
-          "qa/evidence/12-ui-900.png",
-          "qa/evidence/17-assistant-430.png"
+          "qa/evidence/19-phase2-1440.png",
+          "qa/evidence/20-review-900.png",
+          "qa/evidence/23-review-430.png",
+          "qa/evidence/21-phase2-430.png"
         ],
         "fiveGatesVisible": true,
         "fiveDeptsVisible": true,
@@ -144,7 +145,8 @@
           "预览差异",
           "账本",
           "证据标签"
-        ]
+        ],
+        "reviewRows": 6
       }
     },
     "input": {

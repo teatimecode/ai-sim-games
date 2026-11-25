@@ -29,15 +29,15 @@
     /* Phase 2：量产成熟度（可调） */
     maturityStart: 70,
     maturityFloor: 35,
-    maturityReworkCap: 0.30,      // 最低成熟度时的产能损失比例
+    maturityReworkCap: 0.25,      // 最低成熟度时的产能损失比例
     maturityGainPerQuarter: 2,    // 每季自然回升
     maturityGainPerDelivery: 1,   // 每交付一架的工艺沉淀
     maturityWarnAt: 60,           // 低于此值提前预警
     maturityIssueAt: 50,          // 低于此值开始出现交付检查不合格
     processCost: 1.2,             // 工艺改进花费
     processGain: 10,              // 工艺改进提升
-    processCooldown: 3,           // 冷却季数
-    configLoadCap: 0.06,          // 每单配置对产能的额外压力
+    processCooldown: 2,           // 冷却季数
+    configLoadCap: 0.03,          // 每单配置对产能的额外压力
 
     reworkFactor: 0.9
   };
@@ -223,7 +223,7 @@
 
   const CONFIG_TPL = {
     std: { n: '标准通用', disc: 0, shift: 0, load: 0, note: '标准客舱与系统配置，无额外制造压力' },
-    hl:  { n: '高频低成本', disc: 0.02, shift: -1, load: 1, note: '高密度客舱、短周转：折扣更深、窗口前移一季、产线压力 +1' }
+    hl:  { n: '高频低成本', disc: 0.01, shift: -1, load: 1, note: '高密度客舱、短周转：折扣更深、窗口前移一季、产线压力 +1' }
   };
 
   function L(n) { return Math.max(0.45, Math.pow(n, -0.2345)); }

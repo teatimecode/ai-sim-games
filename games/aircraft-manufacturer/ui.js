@@ -1484,6 +1484,34 @@
     const b = document.querySelector('[data-preview]');
     if (b) b.click();
   }
+  if (QA === 'pc' || QA === 'review') {
+    // QA：用真实规则快进到第 15 季（PC 之后），再压低成熟度，保证状态自洽
+    S = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+    for (let t = 1; t <= 13 && !S.ending; t += 1) {
+      if (t === 1) E.setFinance(S, 'gov');
+      if (t === 2) E.buyEngines(S, 24);
+      if (t === 3) S.offers.forEach((o) => { if (o.open && o.id === 'alt') E.decideOffer(S, o.id, true); });
+      if (t === 4) { E.requestExpand(S); E.requestHire(S, 'design'); E.requestHire(S, 'mfg'); }
+      if (t === 5) { E.requestHire(S, 'test'); E.requestHire(S, 'cert'); }
+      if (t === 6) E.buyEngines(S, 48);
+      if (t === 7) E.requestHire(S, 'flight');
+      if (t === 8) S.offers.forEach((o) => { if (o.open && o.id === 'blb') E.decideOffer(S, o.id, true); });
+      if (t === 10) S.offers.forEach((o) => { if (o.open && o.id === 'ocn') E.decideOffer(S, o.id, true); });
+      if (t === 11) E.buyEngines(S, 48);
+      E.autoAssign(S);
+      E.commit(S);
+    }
+    S.maturity = 44;
+    S.feedback = [{ turn: S.turn - 1, cust: '高原航空', score: 72, text: '首架运行三个月，客舱与系统投诉低于预期。' }];
+    ASSIST_UI.hidden = true;
+    tab = 'line';
+    render();
+    if (QA === 'review') {
+      const clone = E.clone(S);
+      const rep = E.commit(clone);
+      showSettlement(rep);
+    }
+  }
   if (SKIP_INTRO) {
     E.setFinance(S, 'gov');
     S.tutOn = true;
