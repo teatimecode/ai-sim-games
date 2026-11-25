@@ -601,15 +601,26 @@ function renderAudioPanel() {
     body.appendChild(hb);
   }
 
+  var technoOk = !!c.lastTestAt && c.state !== 'unsupported';
+  if (technoOk && c.heard !== 'yes') {
+    var lead = document.createElement('p');
+    lead.className = 'audio-note';
+    lead.textContent = c.heard === 'no'
+      ? '技术状态显示音频通道可用，但你没听到。这多半是设备或输出端的问题，不是音频文件加载失败，也不是 CDN 的问题。'
+      : '测试音已经调度出去了。如果此刻没有声音，先按下面的清单排查。';
+    body.appendChild(lead);
+  }
+
   if (c.heard === 'no') {
     var tips = document.createElement('ul');
     tips.className = 'audio-tips';
     [
-      '先确认手机媒体音量不是 0，也没有开静音或勿扰模式。',
-      '如果连着蓝牙耳机或外放音箱，看看声音是不是被路由到了别的设备。',
-      '确认这个页面在前台；从后台切回来的应用可能被系统暂停声音。',
-      '回到这里再点一次「启用声音」。',
-      '仍然没声，可以换一个浏览器再试，并把这个面板的诊断摘要一起反馈。'
+      'iPhone / iPad：检查机身侧边的响铃/静音开关，以及控制中心里的静音模式；网页无法可靠读取这个开关，只能手动确认。',
+      '确认媒体音量不是 0，也不是只调了铃声音量。',
+      '如果连着蓝牙耳机、AirPods 或外放音箱，看看声音是不是被路由到了别的设备。',
+      '确认页面在前台；从后台切回来或被来电打断后，可能需要再点一次「启用声音」。',
+      '回到这里再点一次「测试声音」。',
+      '仍然没声，换一个浏览器再试，并把这个面板的诊断摘要一起反馈。'
     ].forEach(function (t) {
       var li = document.createElement('li');
       li.textContent = t;
@@ -2160,7 +2171,8 @@ var state = {
   mastery: {},
   evidence: {},
   tour: null,
-  tourRuns: 0
+  tourRuns: 0,
+  variant: null
 };
 
 function totalSlots(level) {
@@ -2183,7 +2195,8 @@ function saveState() {
       avatar: state.avatar, avatarSeed: state.avatarSeed, avatarConfirmed: state.avatarConfirmed,
       hintTier: state.hintTier, records: state.records,
       compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone,
-      mastery: state.mastery, evidence: state.evidence, tour: state.tour, tourRuns: state.tourRuns
+      mastery: state.mastery, evidence: state.evidence, tour: state.tour, tourRuns: state.tourRuns,
+      variant: state.variant
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -2202,6 +2215,7 @@ function loadState() {
     if (d.warmupDone) state.warmupDone = true;
     if (d.tour && Array.isArray(d.tour.rooms) && d.tour.rooms.length === 3) state.tour = d.tour;
     if (Number.isInteger(d.tourRuns)) state.tourRuns = d.tourRuns;
+    if (d.variant && typeof d.variant === 'object') state.variant = d.variant;
     if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
@@ -3766,6 +3780,11 @@ function enterRoom(id) {
   if (!(state.tour && state.tour.active)) {
     state.evidence[id] = { hints: 0, faults: 0 };
     state._faultFlag = false;
+    state.variant = null;
+  } else if (state.tour.index === 2 && state.tour.variantAt && variantSupports(room)) {
+    state.variant = { id: id, shift: state.tour.variantAt };
+  } else {
+    state.variant = null;
   }
   renderRoom();
   if (!state.warmupDone) openWarmup();
@@ -4156,7 +4175,7 @@ function openHelp(room) {
 function renderRoom() {
   stopFormAnim();
   stopDrone();
-  var room = ROOM_INDEX[state.roomId];
+  var room = variantRoom(ROOM_INDEX[state.roomId]);
   if (!room) { renderMap(); return; }
   state.view = 'room';
   $('viewLanding').hidden = true;
@@ -4165,7 +4184,7 @@ function renderRoom() {
   $('btnBackMap').hidden = false;
   $('btnLanding').hidden = true;
 
-  $('roomTitle').textContent = room.title;
+  $('roomTitle').textContent = room.title + (room.isVariant ? ' · 变式' : '');
   $('roomMeta').textContent = room.meta;
   $('charName').textContent = room.char;
   $('charLine').textContent = charLineFor(room);
@@ -5529,7 +5548,9 @@ function buildTour(s) {
   var rest = ranked.filter(function (r) { return r.id !== weak.id; });
   var prof = rest.filter(function (r) { return masteryOf(s, r.id) === 'proficient'; })[0] || rest[0];
   var rest2 = rest.filter(function (r) { return r.id !== prof.id; });
-  var cross = rest2.filter(function (r) { return r.district !== weak.district && r.kind !== weak.kind; })[0]
+  var cross = rest2.filter(function (r) { return r.district !== weak.district && r.kind !== weak.kind && variantSupports(r); })[0]
+    || rest2.filter(function (r) { return r.district !== weak.district && variantSupports(r); })[0]
+    || rest2.filter(function (r) { return r.district !== weak.district && r.kind !== weak.kind; })[0]
     || rest2.filter(function (r) { return r.district !== weak.district; })[0]
     || rest2[0];
   if (!weak || !prof || !cross) {
@@ -5570,6 +5591,7 @@ function startTour() {
     hintsUsed: 0,
     faults: 0,
     before: plan.rooms.map(function (id) { return { id: id, mastery: masteryOf(state, id) }; }),
+    variantAt: plan.rooms[2] && variantSupports(ROOM_INDEX[plan.rooms[2]]) ? VARIANT_SHIFT : 0,
     attempt: { hints: 0, faults: 0 }
   };
   saveState();
@@ -5581,9 +5603,11 @@ function tourPass(room) {
   var t = state.tour;
   var ev = t.attempt || { hints: 0, faults: 0 };
   var before = masteryOf(state, room.id);
-  var after = masteryAfterPass(before, ev, true);
+  var slot = t.slots[t.index];
+  var after = masteryAfterPass(before, ev, slot === 'cross');
   if (masteryRank(state, room.id) < MASTERY_ORDER[after]) state.mastery[room.id] = after;
-  t.results.push({ id: room.id, title: room.title, hints: ev.hints, faults: ev.faults, before: before, after: after });
+  t.results.push({ id: room.id, title: room.title, hints: ev.hints, faults: ev.faults, before: before, after: after,
+    slot: slot, variant: !!(state.variant && state.variant.id === room.id) });
   t.hintsUsed += ev.hints;
   t.faults += ev.faults;
   state.lastMastery = { id: room.id, level: after };
@@ -5635,6 +5659,7 @@ function endTour() {
   if (!state.tour) return;
   state.tourRuns = (state.tourRuns || 0) + 1;
   state.tour = null;
+  state.variant = null;
   saveState();
 }
 
@@ -5782,6 +5807,46 @@ function goNext(room) {
   state.district = room.district;
   saveState();
   enterRoom(next.id);
+}
+
+// 受控变式：把整道题整体移调，规则只看音程，因此有解性不变
+var VARIANT_SHIFT = 2;
+
+function variantSupports(room) {
+  return !!room && (room.kind === 'scale' || room.kind === 'compass');
+}
+
+function makeVariant(room, shift) {
+  if (!variantSupports(room)) return room;
+  var c = JSON.parse(JSON.stringify(room));
+  if (c.kind === 'scale') {
+    c.target.pcs = room.target.pcs.map(function (pc) { return (pc + shift) % 12; });
+    c.target.tonic = (room.target.tonic + shift) % 12;
+    c.target.degrees = c.target.pcs.map(function (pc) { return NAMES[pc]; });
+    c.target.label = room.target.label + '（整体上移 ' + shift + ' 个半音）';
+    if (c.guide) {
+      c.guide = JSON.parse(JSON.stringify(room.guide));
+      c.guide.goal = room.guide.goal.replace(room.target.label, c.target.label);
+      c.guide.done = room.guide.done
+        .replace(room.target.label, c.target.label)
+        .replace(/主音定在 [A-G][♯♭]?/, '主音定在 ' + NAMES[c.target.tonic]);
+    }
+  } else {
+    c.compass.from = { pc: (room.compass.from.pc + shift) % 12, mode: room.compass.from.mode };
+    c.compass.to = { pc: (room.compass.to.pc + shift) % 12, mode: room.compass.to.mode };
+    if (c.guide) {
+      c.guide = JSON.parse(JSON.stringify(room.guide));
+      c.guide.goal = room.guide.goal + '（变式：起点与目标整体上移 ' + shift + ' 个半音）';
+    }
+  }
+  c.isVariant = true;
+  return c;
+}
+
+function variantRoom(room) {
+  var v = state.variant;
+  if (!v || !room || v.id !== room.id) return room;
+  return makeVariant(room, v.shift);
 }
 
 function passRoom(room) {
@@ -6103,6 +6168,7 @@ if (typeof module !== 'undefined' && module.exports) {
     faultNarrative: faultNarrative, roomCardFacts: roomCardFacts, roomCardMarkup: roomCardMarkup,
     roomCardFilename: roomCardFilename, printRoomCard: printRoomCard, cardOfferBlock: cardOfferBlock,
     roomResultSummary: roomResultSummary, roomLearnPoint: roomLearnPoint, roomPlayableIndex: roomPlayableIndex,
+    makeVariant: makeVariant, variantSupports: variantSupports, variantRoom: variantRoom, VARIANT_SHIFT: VARIANT_SHIFT,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
     diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,

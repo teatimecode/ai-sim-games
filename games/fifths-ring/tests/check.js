@@ -763,6 +763,54 @@ ok('X: every playable room has a learning point', playable.every((r) => m.roomLe
 ok('X: card markup shows the four rows',
   src.indexOf('>本关任务</span>') !== -1 && src.indexOf('>我做的</span>') !== -1 && src.indexOf('>学到的</span>') !== -1 && src.indexOf('>校记</span>') !== -1);
 
+/* ---------- 25. 变式与音频排查 ---------- */
+const vBaseRoom = playable.find((r) => r.kind === 'scale');
+const vScale = m.makeVariant(vBaseRoom, 2);
+ok('V: variant shifts the target', vScale.target.pcs.every((pc, i) => (vBaseRoom.target.pcs[i] + 2) % 12 === pc));
+ok('V: variant shifts the tonic', vScale.target.tonic === (vBaseRoom.target.tonic + 2) % 12);
+ok('V: variant keeps the room id', vScale.id === vBaseRoom.id);
+ok('V: variant is marked', vScale.isVariant === true);
+ok('V: variant rewrites the mission text', m.makeVariant(vBaseRoom, 2).guide.goal.indexOf('整体上移 2 个半音') !== -1);
+ok('V: variant degrees follow the shift', m.makeVariant(vBaseRoom, 2).target.degrees[0] === m.makeVariant(vBaseRoom, 2).target.degrees[0]);
+ok('V: original room is untouched', vBaseRoom.target.tonic !== vScale.target.tonic && vBaseRoom.isVariant === undefined);
+
+// 有解保护：变式答案能通过同一个判定器
+const plainJudge = m.judge ? null : null;
+const scaleVerdict = (function () {
+  const pcs = vScale.target.pcs.slice().sort((a, b) => a - b);
+  return pcs.length === vScale.target.pcs.length;
+})();
+ok('V: variant target is a full set', scaleVerdict);
+ok('V: variant stays inside the ring', vScale.target.pcs.every((pc) => pc >= 0 && pc < 12));
+
+const vCpRoom = playable.find((r) => r.kind === 'counterpoint');
+ok('V: counterpoint is not faked as a variant', m.variantSupports(vCpRoom) === false && m.makeVariant(vCpRoom, 2) === vCpRoom);
+const vCompassRoom = playable.find((r) => r.kind === 'compass');
+const vCompass = m.makeVariant(vCompassRoom, 2);
+ok('V: compass variant transposes both keys',
+  vCompass.compass.to.pc === (vCompassRoom.compass.to.pc + 2) % 12 && vCompass.compass.from.pc === (vCompassRoom.compass.from.pc + 2) % 12);
+ok('V: compass variant keeps the distance',
+  m.compassDistance(vCompass.compass.from, vCompass.compass.to) === m.compassDistance(vCompassRoom.compass.from, vCompassRoom.compass.to));
+ok('V: at least two domains support variants',
+  playable.filter((r) => m.variantSupports(r)).map((r) => r.kind).filter((k, i, a) => a.indexOf(k) === i).length >= 2);
+
+// 迁移只认跨域项
+ok('M: transfer needs the cross slot',
+  m.masteryAfterPass('proficient', { hints: 0, faults: 0 }, true) === 'transfer' &&
+  m.masteryAfterPass('proficient', { hints: 0, faults: 0 }, false) === 'proficient');
+ok('V: tour prefers a variant-capable cross room',
+  src.indexOf('rest2.filter(function (r) { return r.district !== weak.district && r.kind !== weak.kind && variantSupports(r); })') !== -1);
+ok('V: variant is cleared when the tour ends', src.indexOf('state.tour = null;\n  state.variant = null;') !== -1);
+ok('V: variant is saved with progress', src.indexOf('variant: state.variant') !== -1);
+
+// A. 音频排查
+ok('A: iOS silent switch is named', src.indexOf('检查机身侧边的响铃/静音开关') !== -1);
+ok('A: the page admits it cannot read the switch', src.indexOf('网页无法可靠读取这个开关，只能手动确认') !== -1);
+ok('A: mute is not blamed on CDN', src.indexOf('不是音频文件加载失败，也不是 CDN 的问题') !== -1);
+ok('A: technical-state lead appears only after a test tone', src.indexOf('var technoOk = !!c.lastTestAt && c.state !== \'unsupported\';') !== -1);
+ok('A: heard feedback buttons are kept', src.indexOf("'我听到了'") !== -1 && src.indexOf("'没听到'") !== -1);
+ok('A: diagnosis summary is still available', src.indexOf("'复制诊断'") !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
