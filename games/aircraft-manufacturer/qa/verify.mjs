@@ -207,6 +207,36 @@ done.pending.assign = { d3: 3 };
 const dr = E.commit(done);
 assert(dr.notes.some((n) => n.indexOf('系统布置与数字样机') >= 0), '完成工作项应写入 doneNow 记录');
 
+/* --- Phase 1：预览 / 复盘 / 账本 / 证据 --- */
+const pv = E.newGame({ seed: 20260419 });
+E.setFinance(pv, 'gov'); E.commit(pv);
+E.buyEngines(pv, 24); E.requestExpand(pv); E.autoAssign(pv);
+const snapPv = JSON.stringify(pv);
+const delta = E.previewDelta(pv, 10);
+assert(Array.isArray(delta) && delta.length <= 5, '预览最多 5 条，实际 ' + delta.length);
+assert(delta.length > 0, '有决策时应至少给出一条差异');
+assert(JSON.stringify(pv) === snapPv, 'previewDelta 不得修改原状态');
+
+const rv = E.commit(pv);
+assert(rv.review && rv.review.items.length === 5, '复盘应覆盖 5 类指标');
+assert(rv.review.items.every((x) => x.src && x.why && String(x.v).length), '每类指标都要有值/原因/来源');
+assert(typeof rv.review.next === 'string' && rv.review.next.length > 0, '复盘应给出下一季唯一建议');
+assert(pv.ledger.length >= 1 && pv.ledger.every((x) => x.acts.length <= 3), '每季账本上限 3 条');
+
+const seedA = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+const seedB = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+assert(JSON.stringify(seedA.schedule) === JSON.stringify(seedB.schedule), '相同 seed 与立项应复现同一事件排期');
+const seedC = E.newGame({ seed: 777, seat: 'main', route: 'clean' });
+assert(JSON.stringify(seedA.schedule) !== JSON.stringify(seedC.schedule), '不同 seed 应给出不同排期');
+
+const ls = E.ledgerSummary(pv);
+['variant', 'seed', 'best', 'costly', 'lateGate', 'echoes', 'decisions', 'events']
+  .forEach((k) => assert(Object.prototype.hasOwnProperty.call(ls, k), '账本摘要缺少 ' + k));
+
+const assistIds = E.ASSIST.steps.map((x) => x.id);
+assert(assistIds.every((id) => (E.assistEvidence(id) || '').length > 0), '每步助理都要有证据标签');
+assert(E.assistEvidence('s2-engine').indexOf('到货') >= 0, '证据标签应指向具体字段，如发动机到货季');
+
 /* --- 助理折叠与资源探测（源码契约断言） --- */
 const uiSrc = readFileSync(resolve(ROOT, 'ui.js'), 'utf8');
 const htmlSrc = readFileSync(resolve(ROOT, 'index.html'), 'utf8');
