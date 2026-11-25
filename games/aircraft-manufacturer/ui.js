@@ -53,6 +53,7 @@
       '<div class="awho"><b>' + esc(E.ASSIST.name) + '</b><em>' + esc(E.ASSIST.role) + ' · 第 ' + st.season + ' 季</em></div>' +
       '<p class="atext">' + esc(st.text) + '</p>' +
       '<p class="anext">' + esc(st.next) + '</p>' +
+      '<div class="aev">依据 · ' + esc(E.assistEvidence(st.id) || '当前状态') + '</div>' +
       '<div class="aops">' + ops +
       '<div class="aops2">' +
       '<button class="abtn ghost" data-assist-op="collapse">收起</button>' +
@@ -1219,6 +1220,11 @@
           <div class="repcard"><div class="k">累计交付</div><div class="v mono">${r.deliveredTotal} <small>/ ${C.target}</small></div></div>
         </div>
         <div class="attr">${esc(r.attribution || '')}</div>
+        ${r.review ? `<h3>本季复盘</h3>
+        <div class="rev">
+          ${r.review.items.map((x) => `<div class="revrow"><span class="rk">${esc(x.k)}</span><b class="mono">${esc(String(x.v))}</b><em>${esc(x.why)}</em><i class="src" title="来源">${esc(x.src)}</i></div>`).join('')}
+        </div>
+        <div class="revnext"><b>下一季先做</b>${esc(r.review.next)}</div>` : ''}
         ${evs}
         ${lines || pens ? `<h3>现金明细</h3><div class="replist">${lines}${pens}</div>` : ''}
         ${notes ? `<h3>本季发生了什么</h3>${notes}` : ''}
@@ -1239,6 +1245,7 @@
       <i style="display:block;background:${h.deliver ? 'var(--teal)' : 'var(--ink-20)'};height:${Math.min(100, h.deliver * 14)}%"></i>
       <em style="font-style:normal;font-size:8px;color:var(--ink-40);text-align:center;margin-top:3px">${h.turn}</em></div>`).join('');
     const gates = E.gateState(S);
+    const ledger = E.ledgerSummary(S);
     openModal(`
       <header><span class="t">结项 · ${esc(e.title)}</span><button class="x" data-close>×</button></header>
       <div class="body">
@@ -1252,6 +1259,18 @@
         <div class="replist">${gates.map((g) => `<div><span>${g.n}</span><span class="mono ${g.done ? 'pos' : 'neg'}">${g.done ? '通过' : '未通过'}</span></div>`).join('')}</div>
         <h3>你的交付节奏</h3>
         <div style="display:flex;gap:2px;align-items:flex-end;margin:6px 0 4px">${bars}</div>
+        <h3>决策账本</h3>
+        <div class="rev">
+          <div class="revrow"><span class="rk">立项组合</span><b>${esc(S.seat === 'small' ? '96 座' : '130 座')} · ${esc(S.route === 'clean' ? '全新设计' : '改型衍生')}</b><i class="src">seed ${S.seed}</i></div>
+          <div class="revrow"><span class="rk">最有价值</span><b class="mono">${esc(ledger.best)}</b><i class="src">history</i></div>
+          <div class="revrow"><span class="rk">最昂贵</span><b class="mono">${esc(ledger.costly)}</b><i class="src">history</i></div>
+          <div class="revrow"><span class="rk">最晚修正</span><b>${esc(ledger.lateGate)}</b><i class="src">report.notes</i></div>
+          ${ledger.echoes.length ? `<div class="revrow"><span class="rk">选择回响</span><b>${esc(ledger.echoes.join(' · '))}</b><i class="src">echoes</i></div>` : ''}
+        </div>
+        <details class="ledger"><summary>逐季决策（${esc(String(S.ledger.length))} 季有记录）</summary>
+          ${S.ledger.map((x) => `<div class="ledrow"><span class="mono">T${x.turn}</span>${esc(x.acts.join('；'))}</div>`).join('')}
+        </details>
+
         <h3>这一局教给你什么</h3>
         <ul>
           <li>订单是承诺，交付才是收入。中间隔着设计、工装、试验、试飞、取证五道门。</li>
@@ -1260,8 +1279,15 @@
           <li>${S.finance === 'gov' ? '你拿了政府基金，所以背了 25 架的交付承诺。' : '你只拿了银行贷款，没有承诺压力，但钱也少了一半多。'}</li>
         </ul>
       </div>
-      <footer><button class="btn ghost" id="rocket">进入第三章 · 箭体</button><button class="btn" id="again">再开一局</button></footer>`, true);
+      <footer><button class="btn ghost" id="rocket">进入第三章 · 箭体</button><button class="btn ghost" id="againSame">同配置重开</button><button class="btn" id="again">再开一局</button></footer>`, true);
     $('#rocket').onclick = () => { RS.route = null; showRocket(); };
+    const again2 = document.getElementById('againSame');
+    if (again2) again2.onclick = () => {
+      const seat = S.seat, route = S.route, seed = S.seed;
+      closeModal(); S = E.newGame({ seed: seed, seat: seat, route: route }); S.tutOn = true; beatShown = 0;
+      ASSIST_UI.seen = []; ASSIST_UI.log = []; ASSIST_UI.hidden = false; ASSIST_UI.collapsed = true;
+      render(); toast('已用相同立项与 seed 重开。');
+    };
     $('#again').onclick = () => { closeModal(); restart(); };
   }
 
@@ -1285,7 +1311,7 @@
   }
 
   document.addEventListener('click', (ev) => {
-    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run],[data-visit],[data-audio],[data-route],[data-assist-op]');
+    const t = ev.target.closest('[data-act],[data-buy],[data-work],[data-unwork],[data-dept],[data-hire],[data-offer],[data-tab],[data-open],[data-bay],[data-close],[data-assist],[data-codex],[data-story],[data-pick],[data-guide],[data-run],[data-visit],[data-audio],[data-route],[data-assist-op],[data-preview]');
     if (!t) return;
     if (t.dataset.pick) {
       prologuePick[t.dataset.pick] = t.dataset.val;
@@ -1320,6 +1346,13 @@
         '<div><span>预计收款（交付 50%+尾款）</span><span class="mono pos">+' + (est * price * 0.5).toFixed(2) + ' 亿</span></div>' +
         '<div><span>预计支出（研发/利息/采购/扩线/招聘）</span><span class="mono neg">−' + out.toFixed(2) + ' 亿</span></div>' +
         '<div><span>期末现金（估算）</span><span class="mono">' + (S.cash + est * price * 0.5 - out).toFixed(2) + ' 亿</span></div>' +
+        '</div>' + (function () {
+          const d = E.previewDelta(S, 8);
+          if (!d.length) return '<p class="dnote">与「本季什么都不做」相比，预测结果没有差异。</p>';
+          return '<h3>与「本季不做决策」相比</h3><div class="rev">' +
+            d.map((x) => '<div class="revrow"><span class="rk">' + esc(x.label) + '</span><b class="mono">' + esc(String(x.from)) + ' → ' + esc(String(x.to)) + '</b><i class="src">forecast</i></div>').join('') +
+            '</div><p class="dnote">按当前假设估算，不是保证。forecast 只读推演，不改变存档。</p>';
+        })() + '<div>' +
         '</div><p style="font-size:9.5px;color:var(--ink-40);margin-top:6px">不含本季新签单定金与事件影响。</p></div>' +
         '<footer><button class="btn" data-close>关闭</button></footer>');
       return;
@@ -1428,7 +1461,14 @@
   // QA/截图入口：?skipIntro=1 直接进入第 1 季（跳过序章与融资弹窗），不影响正常流程
   const SKIP_INTRO = /(?:^|[?&])skipIntro=1(?:&|$)/.test(location.search);
   probeAssets();
+  // QA 入口：?qa=1 展开助理；?qa=preview 再打开结算预览
+  const QA = (location.search.match(/[?&]qa=([a-z]+)/) || [])[1];
+  if (QA) ASSIST_UI.collapsed = false;
   render();
+  if (QA === 'preview') {
+    const b = document.querySelector('[data-preview]');
+    if (b) b.click();
+  }
   if (SKIP_INTRO) {
     E.setFinance(S, 'gov');
     S.tutOn = true;

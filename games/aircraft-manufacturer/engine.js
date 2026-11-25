@@ -233,6 +233,8 @@
       needs: null,
       echoes: [],
       echoFlags: {},
+      ledger: [],
+      ledgerStartCash: CONFIG.startCash,
       airlines: {
         '高原航空': { key: 'alt', fleet: 12, got: 0, rel: 50, rel9: null, note: '高原支线的老牌网络航司，机队正在换喷气' },
         '横跨航空': { key: 'trx', fleet: 8, got: 0, rel: 45, rel9: null, note: '新兴市场高速扩张，融资最脆弱' },
@@ -517,6 +519,19 @@
     ]
   };
 
+  const ASSIST_EVIDENCE = {
+    's1-hello': '顶栏 · 现金 / 在手 / 已交付',
+    's1-money': '融资面板 · 研发 0.7 亿/季',
+    's1-assign': '技术流程 · 部门产能与关键路径',
+    's1-commit': '页脚 · 本季产出预估',
+    's2-engine': '采购页 · 到货季 T+n+3',
+    's2-path': '项目阶段 · 关键路径与预测',
+    's3-order': '商务页 · 订单窗口与折扣',
+    's3-customer': '客户页 · 关系 / 可靠性',
+    's3-end': '结项 · 决策账本'
+  };
+  function assistEvidence(id) { return ASSIST_EVIDENCE[id] || ''; }
+
   function assistReady(s, step) {
     if (!s) return false;
     if (step.at === 'turn') return s.turn >= step.turn;
@@ -716,6 +731,103 @@
     return ROCKET.reusable.dev / (marginReuse - marginExp);
   }
 
+
+  /* ---------- Phase 1：决策预览 / 复盘 / 账本 ---------- */
+  function clearPending(s) {
+    const c = clone(s);
+    c.pending = { overtime: false, expand: false, hires: {}, engines: 0, assign: {}, accept: [], decline: [],
+      release: 0, extra: false, story: null, visits: [], enginesCost: 0, engineUnit: 0.35 };
+    return c;
+  }
+
+  /** 只读预测：对比"本季决策全不做"与"按当前决策做"，最多 5 条差异 */
+  function previewDelta(s, horizon) {
+    const base = forecast(clearPending(s), horizon || 8);
+    const now = forecast(clone(s), horizon || 8);
+    const out = [];
+    function diff(label, a, b) { if (String(a) !== String(b)) out.push({ label: label, from: a, to: b }); }
+    diff('预计 TC', base.tc || '—', now.tc || '—');
+    diff('预计 PC', base.pc || '—', now.pc || '—');
+    diff('首架交付', base.firstDelivery || '—', now.firstDelivery || '—');
+    diff('现金最低点', base.minCash.toFixed(1) + ' 亿', now.minCash.toFixed(1) + ' 亿');
+    diff('期末交付', base.delivered + ' 架', now.delivered + ' 架');
+    return out.slice(0, 5);
+  }
+
+  /** 季度复盘：五类指标，每类带来源字段 */
+  function buildReview(s, r) {
+    const items = [];
+    const delta = r.cashEnd - r.cashStart;
+    items.push({ k: '现金', v: r.cashEnd.toFixed(2) + ' 亿',
+      why: (delta >= 0 ? '净流入 ' : '净流出 ') + Math.abs(delta).toFixed(2) + ' 亿', src: 'report.cashEnd-cashStart' });
+    const gatesDone = GATES.filter(function (g) { return workDone(s, g.work); }).length;
+    const doneNow = (r.notes || []).filter(function (n) { return n.indexOf('【完成】') === 0; }).length;
+    items.push({ k: '工作项/门', v: gatesDone + ' / ' + GATES.length + ' 道门',
+      why: doneNow ? '本季完成 ' + doneNow + ' 个工作项' : '本季没有工作项闭环', src: 'works / gates' });
+    items.push({ k: '质量', v: String(s.quality),
+      why: s.quality < 55 ? '低于 55，产能打九折' : (r.notes || []).some(function (n) { return n.indexOf('加班') >= 0; }) ? '加班提产拉低质量' : '随季度回归回升',
+      src: 'quality' });
+    items.push({ k: '信誉', v: String(s.rep),
+      why: r.penalties.length ? '逾期取消 ' + r.penalties.length + ' 架' : '交付与回响累积', src: 'rep / report.penalties' });
+    const backlog = activeSlots(s).length;
+    items.push({ k: '订单', v: backlog + ' 架在手',
+      why: r.deliveredTotal ? '累计交付 ' + r.deliveredTotal + ' 架' : '尚未开始交付', src: 'slots / deliveredTotal' });
+    const g = nextGate(s);
+    let next = '五道门已全部通过，接下来盯产能与发动机。';
+    if (g) {
+      const w = workById(g.work);
+      const miss = w.req.filter(function (x) { return !workDone(s, x); }).map(function (x) { return workById(x).n; });
+      next = miss.length ? '下一季先补 ' + miss[0] + '，它是「' + g.n + '」的前置。' : '下一季直接推进「' + w.n + '」，这是当前门的关键项。';
+    }
+    return { items: items, next: next };
+  }
+
+  /** 每季 1–3 条关键决策（纯记账，不影响经济） */
+  function recordLedger(s, t, p, storyPick) {
+    const acts = [];
+    if (p.expand) acts.push('投扩线 2.4 亿');
+    Object.keys(p.hires || {}).forEach(function (d) {
+      const def = DEPTS.filter(function (x) { return x.id === d; })[0];
+      if (def) acts.push('增聘 ' + def.n + ' ×' + p.hires[d]);
+    });
+    if (p.engines) acts.push('锁定 ' + p.engines + ' 台发动机');
+    (p.accept || []).forEach(function (id) {
+      const o = OFFERS.filter(function (x) { return x.id === id; })[0];
+      if (o) acts.push('接单 ' + o.cust + ' ' + o.qty + ' 架');
+    });
+    if (p.overtime) acts.push('加班提产');
+    if (storyPick && s.story) acts.push('抉择「' + s.story.title + '」');
+    if (acts.length) s.ledger.push({ turn: t, acts: acts.slice(0, 3) });
+  }
+
+  /** 结局账本摘要：只做归因，不新增胜负条件 */
+  function ledgerSummary(s) {
+    let best = null, costly = null;
+    s.history.forEach(function (h, i) {
+      const prev = i > 0 ? s.history[i - 1].cash : s.ledgerStartCash;
+      const d = h.cash - (prev == null ? h.cash : prev);
+      if (!best || d > best.d) best = { turn: h.turn, d: d };
+      if (!costly || d < costly.d) costly = { turn: h.turn, d: d };
+    });
+    const gateTurn = {};
+    s.log.forEach(function (r) {
+      (r.notes || []).forEach(function (n) {
+        if (n.indexOf('【完成】') === 0) gateTurn[n.replace('【完成】', '').split(' ——')[0]] = r.turn;
+      });
+    });
+    const flat = s.ledger.reduce(function (a, x) { return a.concat(x.acts); }, []);
+    return {
+      variant: { seat: s.seat, route: s.route },
+      seed: s.seed,
+      best: best ? '第 ' + best.turn + ' 季（现金变动 ' + best.d.toFixed(2) + ' 亿）' : '—',
+      costly: costly ? '第 ' + costly.turn + ' 季（现金变动 ' + costly.d.toFixed(2) + ' 亿）' : '—',
+      lateGate: Object.keys(gateTurn).length ? Object.keys(gateTurn).sort(function (a, b) { return gateTurn[b] - gateTurn[a]; })[0] + '（第 ' + gateTurn[Object.keys(gateTurn).sort(function (a, b) { return gateTurn[b] - gateTurn[a]; })[0]] + ' 季完成）' : '—',
+      echoes: s.echoes.map(function (e) { return '第' + e.turn + '季「' + e.title + '」'; }),
+      decisions: flat.slice(0, 8),
+      events: Object.keys(s.schedule).map(function (k) { return 'T' + k + ' ' + (eventById(s.schedule[k]) || {}).title; })
+    };
+  }
+
   /* ---------- 结算 ---------- */
   function commit(s) {
     const cashStart = s.cash;
@@ -851,6 +963,8 @@
       const q = arrived.reduce(function (a, x) { return a + x.qty; }, 0);
       r.notes.push(q + ' 台发动机到货，库存 ' + s.engines + ' 台。');
     }
+
+    recordLedger(s, t, p, p.story);
 
     /* 故事选择 */
     if (s.story) {
@@ -1008,6 +1122,7 @@
     });
 
     r.cashEnd = s.cash;
+    r.review = buildReview(s, r);
     r.deliveredTotal = s.delivered;
     r.capacity = cap;
     r.enginesLeft = s.engines;
@@ -1054,7 +1169,7 @@
 
   const api = {
     CONFIG: CONFIG, DEPTS: DEPTS, WORKS: WORKS, GATES: GATES, OFFERS: OFFERS, EVENT_POOL: EVENT_POOL, BEATS: BEATS, needOf: needOf,
-    ROCKET: ROCKET, rocketCalc: rocketCalc, rocketBreakEven: rocketBreakEven, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
+    ROCKET: ROCKET, rocketCalc: rocketCalc, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
     newGame: newGame, applyTurnStart: applyTurnStart,
     capacity: capacity, effectiveCycle: effectiveCycle, unitCost: unitCost,
     slotPrice: slotPrice, slotPrice2: slotPrice2,
