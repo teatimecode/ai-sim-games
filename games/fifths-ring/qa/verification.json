@@ -1219,6 +1219,7 @@
       "真机与听感",
       "生产页面（需合并新 PR）"
     ],
-    "tests": "812 passed / 0 failed"
+    "tests": "812 passed / 0 failed",
+    "docs": "README、GAME_DESIGN、INFORMATION_ARCHITECTURE、CONTENT_ROADMAP、QA 均已同步"
   }
 }
