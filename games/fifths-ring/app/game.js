@@ -3781,6 +3781,8 @@ function enterRoom(id) {
     state.evidence[id] = { hints: 0, faults: 0 };
     state._faultFlag = false;
     state.variant = null;
+    state.explainOpen = false;
+    state.localCompare = false;
   } else if (state.tour.index === 2 && state.tour.variantAt && variantSupports(room)) {
     state.variant = { id: id, shift: state.tour.variantAt };
   } else {
@@ -4203,6 +4205,10 @@ function renderRoom() {
   body.className = 'room-body kind-' + room.kind;
   body.innerHTML = '';
   actions.innerHTML = '';
+  var pdef = predictFor(room);
+  if (pdef && !room.isVariant) {
+    body.appendChild(buildPredictBox(room, pdef));
+  }
 
   var p = roomProgress(room);
   state.diff = roomHasFailure(room) ? firstDiffOf(room) : null;
@@ -4211,6 +4217,15 @@ function renderRoom() {
   state._faultFlag = _fault;
   renderTourBar();
   body.appendChild(buildMission(room, p));
+  if (state.diff) {
+    var cmpWrap = document.createElement('div');
+    cmpWrap.className = 'compare-row';
+    cmpWrap.appendChild(mkBtn('对照这一处', 'btn btn-mini', function () {
+      state.localCompare = !state.localCompare;
+      renderRoom();
+    }));
+    body.appendChild(cmpWrap);
+  }
 
   var work = document.createElement('div');
   work.className = 'work-area';
@@ -4237,6 +4252,190 @@ function renderRoom() {
   saveState();
 }
 
+
+/* ================= 16. 体验切片：预测 → 局部对照 → 分级解释 ================= */
+
+var SLICE_ROOMS = ['r-cp1', 'r-func', 'r-theme', 'r-normal'];
+
+var PREDICT_DEFS = {
+  'r-cp1': {
+    q: '还没动手之前，先猜一下：这条对位最容易先出哪种问题？',
+    options: [
+      { id: 'fifth', label: '平行五度 / 平行八度' },
+      { id: 'cross', label: '声部交叉或超界' },
+      { id: 'ok', label: '应该一路顺' }
+    ]
+  },
+  'r-func': {
+    q: '先猜：这一串功能会往哪个方向收？',
+    options: [
+      { id: 'dominant', label: '往属方向推' },
+      { id: 'tonic', label: '回主和弦收束' },
+      { id: 'deceptive', label: '中途拐去别的级' }
+    ]
+  },
+  'r-theme': {
+    q: '先猜：这段材料第一次重复会出现在哪儿？',
+    options: [
+      { id: 'early', label: '前四小节之内' },
+      { id: 'later', label: '再往后才有重复' },
+      { id: 'none', label: '根本不重复' }
+    ]
+  },
+  'r-normal': {
+    q: '先猜：这两组音之间会共享几个音？',
+    options: [
+      { id: '0', label: '没有共同音' },
+      { id: '1', label: '共享一个' },
+      { id: '2', label: '共享两个或更多' }
+    ]
+  }
+};
+
+function predictFor(room) {
+  return room ? PREDICT_DEFS[room.id] || null : null;
+}
+
+function predictState(room) {
+  if (!state.predict) state.predict = {};
+  return state.predict[room.id] || null;
+}
+
+function recordPredict(room, choiceId) {
+  if (!state.predict) state.predict = {};
+  state.predict[room.id] = { choice: choiceId, at: Date.now(), skipped: false };
+  saveState();
+}
+
+function skipPredict(room) {
+  if (!state.predict) state.predict = {};
+  state.predict[room.id] = { choice: null, at: Date.now(), skipped: true };
+  saveState();
+}
+
+// 实际结果：从判定与参考解现算，不剧透完整答案
+function predictActual(room) {
+  if (!room) return null;
+  if (room.kind === 'counterpoint') {
+    var r = judge(LEVELS[room.cp], cpState(room).slots);
+    if (!r.violations.length) return { id: 'ok', text: '这次没有违例' };
+    var code = r.violations[0].code;
+    return { id: /FIFTH|OCT/.test(code) ? 'fifth' : 'cross', text: '第一处是 ' + code, slot: r.violations[0].slot };
+  }
+  if (room.kind === 'harmony') {
+    var h = harmonyState(room);
+    var last = (h.chosen && h.chosen.length) ? h.chosen[h.chosen.length - 1].rn : null;
+    if (!last) return { id: 'tonic', text: '还没选完和弦' };
+    if (last === 'I' || last === 'i') return { id: 'tonic', text: '最后落在 ' + last };
+    if (last === 'V' || last === 'V7') return { id: 'dominant', text: '最后停在 ' + last };
+    return { id: 'deceptive', text: '最后落在 ' + last };
+  }
+  if (room.kind === 'form') {
+    var f = room.form;
+    var fm = formState(room);
+    var idx = f.point ? f.point.index : (fm.boundaries && fm.boundaries.length ? fm.boundaries[0] : null);
+    if (idx == null) return { id: 'none', text: '这一页不考重复位置' };
+    return { id: idx <= 4 ? 'early' : 'later', text: '结构点在小节 ' + idx };
+  }
+  if (room.kind === 'set') {
+    var st = setState(room);
+    var n = room.mode === 'common' ? (st.picked || []).length : (room.members || []).length;
+    return { id: n <= 0 ? '0' : n === 1 ? '1' : '2', text: '共同音 ' + n + ' 个' };
+  }
+  return null;
+}
+
+function predictFeedback(room) {
+  var p = predictState(room);
+  if (!p) return null;
+  var actual = predictActual(room);
+  var optLabel = '';
+  var def = predictFor(room);
+  if (def && p.choice) {
+    var hit = def.options.filter(function (o) { return o.id === p.choice; })[0];
+    optLabel = hit ? hit.label : '';
+  }
+  return {
+    mine: p.skipped ? '（跳过了预测）' : optLabel,
+    actual: actual ? actual.text : '还没有可对照的结果',
+    hit: !!(p.choice && actual && p.choice === actual.id),
+    next: '接下来可以先听这一处，再决定改哪里。'
+  };
+}
+
+// 分级解释：先给一句人话，规则与出处收在展开里
+// 局部对照：只比第一处，不整段重放
+function localCompareText(room, diff) {
+  var d = diff || state.diff;
+  if (!room || !d) return null;
+  if (room.kind === 'counterpoint') {
+    var lv = LEVELS[room.cp];
+    var i = d.slot;
+    var j = Math.max(0, i - 1);
+    var mine = [j, i].map(function (k) { return cpState(room).slots[k] == null ? '空' : NAMES[cpState(room).slots[k] % 12]; }).join(' → ');
+    var ref = [j, i].map(function (k) { return lv.reference && lv.reference[k] != null ? NAMES[lv.reference[k] % 12] : '—'; }).join(' → ');
+    return { where: '第 ' + (i + 1) + ' 音，连同它前一个音', mine: mine, ref: ref };
+  }
+  if (room.kind === 'harmony') {
+    var h = harmonyState(room);
+    var sit = room.situations[Math.min(h.step, room.situations.length - 1)];
+    var mineRn = d.rn || (h.chosen.length ? h.chosen[h.chosen.length - 1].rn : '—');
+    var good = sit.options.filter(function (o) { return harmonyIssues(sit.prev, o, room.tonic).length === 0; })[0];
+    return { where: '标记为 ' + d.rn + ' 的那个和弦', mine: mineRn, ref: good ? good.rn : '—' };
+  }
+  if (room.kind === 'set') {
+    var st = setState(room);
+    var mineSet = (st.picked || []).map(function (pc) { return NAMES[pc]; }).join(' ');
+    var plan = referencePlan(room);
+    var refSet = plan && plan.pcs ? plan.pcs.map(function (pc) { return NAMES[pc]; }).join(' ') : '—';
+    return { where: room.mode === 'common' ? '共同音这一组' : '排列这一组', mine: mineSet || '空', ref: refSet };
+  }
+  if (room.kind === 'form') {
+    var fm = formState(room);
+    var labelMine = Object.keys(fm.labels || {}).map(function (k) { return fm.labels[k]; }).join(' ');
+    return { where: '结构点与分段', mine: labelMine || '还没标', ref: room.form.point ? '结构点在第 ' + room.form.point.index + ' 小节' : '按分界标段' };
+  }
+  return null;
+}
+
+function explainLevels(room) {
+  var narr = state.diff ? faultNarrative(ROOM_INDEX[state.roomId], state.diff) : null;
+  return {
+    plain: narr || (room && room.guide ? room.guide.done : '这一页还没有可解释的地方。'),
+    rule: '为什么：规则看的是音程与功能关系，不是音高绝对值。',
+    cite: (room && room.teach && room.teach.cite) ? room.teach.cite : ''
+  };
+}
+
+function buildPredictBox(room, def) {
+  var p = predictState(room);
+  var box = document.createElement('div');
+  box.className = 'predict-box';
+  var q = document.createElement('p');
+  q.className = 'predict-q';
+  q.textContent = '先猜一下（可以跳过）· ' + def.q;
+  box.appendChild(q);
+  var row = document.createElement('div');
+  row.className = 'predict-opts';
+  def.options.forEach(function (o) {
+    var b = mkBtn(o.label, 'btn btn-quiet predict-opt' + (p && p.choice === o.id ? ' is-picked' : ''), function () {
+      recordPredict(room, o.id);
+      renderRoom();
+    });
+    row.appendChild(b);
+  });
+  row.appendChild(mkBtn('跳过预测', 'btn btn-quiet', function () { skipPredict(room); renderRoom(); }));
+  box.appendChild(row);
+  var fb = predictFeedback(room);
+  if (fb) {
+    var line = document.createElement('p');
+    line.className = 'predict-fb' + (p && p.skipped ? ' is-skip' : fb.hit ? ' is-hit' : ' is-miss');
+    line.textContent = '你的预测：' + fb.mine + ' ｜ 实际：' + fb.actual + ' ｜ ' + fb.next;
+    box.appendChild(line);
+  }
+  return box;
+}
+
 function renderMarkList(items, emptyText) {
   var list = $('markList');
   list.innerHTML = '';
@@ -4250,6 +4449,13 @@ function renderMarkList(items, emptyText) {
     nl.textContent = narr;
     list.appendChild(nl);
   }
+  var cmp = state.localCompare ? localCompareText(ROOM_INDEX[state.roomId]) : null;
+  if (cmp) {
+    var cl = document.createElement('li');
+    cl.className = 'local-compare';
+    cl.textContent = '只比这一处（' + cmp.where + '）｜你写的：' + cmp.mine + ' ｜ 参考：' + cmp.ref;
+    list.appendChild(cl);
+  }
   if (!items.length) {
     var li = document.createElement('li');
     li.className = 'is-good';
@@ -4257,7 +4463,19 @@ function renderMarkList(items, emptyText) {
     list.appendChild(li);
     return;
   }
-  items.slice(0, 6).forEach(function (it) {
+  var hiddenCount = Math.max(0, items.length - 1);
+  var showAll = !!state.explainOpen;
+  var shown = showAll ? items.slice(0, 6) : items.slice(0, 1);
+  if (!showAll && hiddenCount > 0) {
+    var more = document.createElement('li');
+    more.className = 'more-rules';
+    more.appendChild(mkBtn('展开规则与出处（' + hiddenCount + '）', 'btn btn-quiet btn-mini', function () {
+      state.explainOpen = true;
+      renderRoom();
+    }));
+    list.appendChild(more);
+  }
+  shown.forEach(function (it) {
     var li = document.createElement('li');
     if (it.cls) li.className = it.cls;
     if (it.label) {
@@ -5445,6 +5663,12 @@ function showVerdict(o) {
   (o.actions || []).forEach(function (a) {
     actions.appendChild(mkBtn(a.label, a.cls || 'btn', a.fn));
   });
+  if (state.diff && ROOM_INDEX[state.roomId]) {
+    actions.appendChild(mkBtn('对照这一处', 'btn', function () {
+      state.localCompare = true;
+      renderRoom();
+    }));
+  }
   if (passLike && state.roomId && ROOM_INDEX[state.roomId] && !(state.tour && state.tour.active)) {
     var thisRoom = ROOM_INDEX[state.roomId];
     actions.appendChild(mkBtn(nextLabelFor(thisRoom), 'btn btn-ink', function () { goNext(thisRoom); }));
@@ -6169,6 +6393,8 @@ if (typeof module !== 'undefined' && module.exports) {
     roomCardFilename: roomCardFilename, printRoomCard: printRoomCard, cardOfferBlock: cardOfferBlock,
     roomResultSummary: roomResultSummary, roomLearnPoint: roomLearnPoint, roomPlayableIndex: roomPlayableIndex,
     makeVariant: makeVariant, variantSupports: variantSupports, variantRoom: variantRoom, VARIANT_SHIFT: VARIANT_SHIFT,
+    SLICE_ROOMS: SLICE_ROOMS, PREDICT_DEFS: PREDICT_DEFS, predictFor: predictFor, predictActual: predictActual,
+    predictFeedback: predictFeedback, localCompareText: localCompareText, explainLevels: explainLevels,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,
     diplomaMarkup: diplomaMarkup, renderDiploma: renderDiploma, diplomaFacts: diplomaFacts,

@@ -811,6 +811,35 @@ ok('A: technical-state lead appears only after a test tone', src.indexOf('var te
 ok('A: heard feedback buttons are kept', src.indexOf("'我听到了'") !== -1 && src.indexOf("'没听到'") !== -1);
 ok('A: diagnosis summary is still available', src.indexOf("'复制诊断'") !== -1);
 
+/* ---------- 26. 体验切片：预测 / 局部对照 / 分级解释 ---------- */
+ok('S: four slice rooms are defined', m.SLICE_ROOMS.length === 4);
+['r-cp1', 'r-func', 'r-theme', 'r-normal'].forEach(function (id) {
+  ok('S: ' + id + ' has a prediction', !!m.predictFor({ id: id }));
+});
+ok('S: prediction has options', m.predictFor({ id: 'r-cp1' }).options.length >= 2);
+ok('S: skipped prediction is allowed', src.indexOf('function skipPredict') !== -1 && src.indexOf('跳过预测') !== -1);
+ok('S: prediction does not block the room', src.indexOf('if (pdef && !room.isVariant)') !== -1);
+ok('S: prediction is saved with progress', src.indexOf('state.predict') !== -1);
+
+const cpPredict = m.predictActual({ id: 'r-cp1', kind: 'counterpoint', cp: 0 });
+ok('S: counterpoint actual comes from the judge', /第一处|没有违例/.test(cpPredict.text), cpPredict.text);
+const setPredict = m.predictActual({ id: 'r-normal', kind: 'set', mode: 'normal', members: [0, 4, 7] });
+ok('S: set actual counts real members', setPredict.id === '2', JSON.stringify(setPredict));
+
+// 局部对照：四种类型都有各自的内容
+const cpCmp = m.localCompareText({ id: 'r-cp1', kind: 'counterpoint', cp: 0 }, { slot: 3 });
+ok('S: counterpoint comparison names the slot', /第 4 音/.test(cpCmp.where), JSON.stringify(cpCmp));
+ok('S: counterpoint comparison is local, not the whole answer', cpCmp.mine.split('→').length === 2 && cpCmp.ref.split('→').length === 2);
+
+// 分级解释：先人话，规则可展开
+ok('S: explanation has three levels', /plain/.test(src) && /rule/.test(src) && /cite/.test(src));
+ok('S: rules are collapsed by default', src.indexOf('展开规则与出处') !== -1);
+ok('S: expanding is remembered per room', src.indexOf('state.explainOpen = true') !== -1);
+ok('S: compare button appears on failure', src.indexOf("'对照这一处'") !== -1);
+ok('S: compare resets when entering a room', src.indexOf('state.localCompare = false') !== -1);
+const markFn = src.slice(src.indexOf('function renderMarkList'), src.indexOf('function renderMarkList') + 2200);
+ok('S: compare line is rendered inside the mark list', markFn.indexOf('local-compare') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
