@@ -649,12 +649,119 @@ ok('F: fault note is rendered first in the mark list', src.indexOf("nl.className
 const cardFacts = m.roomCardFacts({ signed: '甲', mastery: { 'r-c-major': 'proficient' }, records: {} }, 'r-c-major');
 ok('F: room card knows the room', cardFacts.room === '十二块石头', JSON.stringify(cardFacts));
 ok('F: room card carries mastery', cardFacts.level === '熟练');
-ok('F: room card carries a record slot', !!cardFacts.record);
-ok('F: room card keeps a blank signature blank', m.roomCardFacts({}, 'r-c-major').name === '（留白）');
+ok('F: room card marks a missing record as missing', cardFacts.record === null && /终页记校记时添加/.test(cardFacts.recordHint));
+ok('F: room card names an unsigned player', m.roomCardFacts({}, 'r-c-major').name === '记谱学徒（未署名）');
 ok('F: unknown room gives no card', m.roomCardFacts({}, 'nope') === null);
 ok('F: room card can be downloaded', src.indexOf('function downloadRoomCard') !== -1);
 ok('F: room card sends nothing to a server', src.indexOf('fetch(') === -1);
-ok('F: room card is offered on the pass sheet', src.indexOf('存这张校记卡') !== -1);
+ok('F: room card is offered on the pass sheet', src.indexOf('带走这张校记卡') !== -1);
+
+/* ---------- 22. 生产反馈三项 ---------- */
+// 1) 地图 Avatar 不拦截交互，节点可键盘操作
+ok('M1: map avatar cannot capture pointer events',
+  src.indexOf("'pointer-events': 'none', 'aria-hidden': 'true'") !== -1);
+ok('M1: map avatar still renders', src.indexOf("holder.className = 'map-avatar'") !== -1);
+ok('M1: district nodes are focusable buttons',
+  src.indexOf("tabindex: '0', role: 'button'") !== -1);
+ok('M1: district nodes carry an accessible name', src.indexOf("g.setAttribute('aria-label', d.name") !== -1);
+ok('M1: district nodes answer Enter and Space',
+  src.indexOf("ev.key !== 'Enter' && ev.key !== ' '") !== -1);
+
+// 2) 结算后的下一关 CTA
+const s1 = { cleared: {}, pendingRecord: null };
+const first = playable[0];
+ok('N: next room is the first uncleared one', m.nextPlayableAfter(first, s1).id === playable[1].id);
+ok('N: cleared rooms are skipped',
+  m.nextPlayableAfter(first, { cleared: { [playable[1].id]: true } }).id === playable[2].id);
+const everyCleared = {}; playable.forEach((r) => { everyCleared[r.id] = true; });
+ok('N: no next room at the end', m.nextPlayableAfter(playable[playable.length - 1], { cleared: everyCleared }) === null);
+ok('N: locked rooms are never proposed',
+  m.nextPlayableAfter(first, { cleared: {} }).kind !== 'locked');
+ok('N: label names the next room', m.nextLabelFor(first, { cleared: {} }) === '下一关：' + playable[1].title);
+ok('N: label asks for the record first', m.nextLabelFor(first, { cleared: {}, pendingRecord: 'quarry' }) === '记这一区的校记');
+ok('N: label falls back to the map', m.nextLabelFor(playable[playable.length - 1], { cleared: everyCleared }) === '回到环城');
+ok('N: pass sheet carries the next-room button', src.indexOf("nextLabelFor(thisRoom), 'btn btn-ink'") !== -1);
+ok('N: record sheet is not skipped by the shortcut', src.indexOf('if (pending || !next || ending) { clearRoom(room); return; }') !== -1);
+ok('N: ending still wins over jumping ahead', src.indexOf('endingEligible(state) && !state.signed') !== -1);
+
+// 3) 节奏房试听：骨架独立、空白不静默
+ok('R: skeleton plays without any answer', typeof m.playRhythmSkeleton === 'function');
+ok('R: skeleton covers every tick', src.indexOf('for (var tick = 0; tick < per; tick++)') !== -1);
+ok('R: skeleton button is separate from own playback', src.indexOf("mkBtn('听骨架'") !== -1 && src.indexOf("mkBtn('听你铺的'") !== -1);
+ok('R: empty answer is detected before playing', typeof m.rhythmHasContent === 'function');
+ok('R: empty click explains itself', src.indexOf('桥还是空的，先点「听骨架」听节拍') !== -1);
+ok('R: audio gate failure is visible', src.indexOf('声音没起来：浏览器还没解锁音频') !== -1);
+ok('R: mission card matches the new button', src.indexOf('先点「听骨架」') !== -1);
+ok('R: old wording is gone', src.indexOf('先点「试听整段」') === -1);
+
+/* ---------- 23. 结算里的纪念卡 ---------- */
+ok('K: card is offered as a keepsake, not a save file', src.indexOf('带走这张校记卡') !== -1);
+ok('K: old tool-like label is gone', src.indexOf("'存这张校记卡'") === -1);
+ok('K: note says it is not the save', src.indexOf('它不是存档——你的进度已经自动保存') !== -1);
+ok('K: note says it is optional', src.indexOf('不带它也能继续') !== -1);
+ok('K: card previews in place before download', src.indexOf('preview.innerHTML = roomCardMarkup(id)') !== -1);
+ok('K: preview can be collapsed', src.indexOf("openBtn.textContent = '收起预览'") !== -1);
+ok('K: download reports back', src.indexOf("已生成「' + roomCardFilename(id)") !== -1);
+ok('K: format is stated honestly', src.indexOf('HTML 文件，用浏览器打开或打印') !== -1);
+ok('K: blocked download has a fallback', src.indexOf('用「打印 / 预览」另存') !== -1);
+ok('K: print path exists', typeof m.printRoomCard === 'function');
+ok('K: filename is readable', /^五度环-校记卡-.+\.html$/.test(m.roomCardFilename('r-c-major')), m.roomCardFilename('r-c-major'));
+ok('K: next room stays the primary button',
+  src.indexOf("nextLabelFor(thisRoom), 'btn btn-ink'") !== -1 && src.indexOf("mkBtn('带走这张校记卡', 'btn btn-quiet'") !== -1);
+ok('K: card block is skipped during the tour', src.indexOf('!(state.tour && state.tour.active)) {\n    var thisRoom') !== -1);
+ok('K: no third-party or network use', src.indexOf('fetch(') === -1);
+
+ok('K: preview card shrinks instead of scrolling',
+  css.indexOf('.card-preview .diploma-page{margin:0 auto;width:100%;max-width:680px') !== -1);
+ok('K: narrow screens drop the fixed A4 width', css.indexOf('@media (max-width:900px)') !== -1);
+
+/* ---------- 24. 成果卡内容 ---------- */
+const blank = { cleared: { 'r-c-major': true }, mastery: { 'r-c-major': 'understand' }, records: {}, signed: null,
+  evidence: { 'r-c-major': { hints: 2, faults: 1 } }, scale: {} };
+const f1 = m.roomCardFacts(blank, 'r-c-major');
+ok('X: unsigned player is not shown as blank', f1.name.indexOf('记谱学徒') !== -1, f1.name);
+ok('X: unsigned note explains how to sign', src.indexOf('完成全城校记后可在终页署名') !== -1);
+ok('X: card carries the room goal', !!f1.goal && f1.goal.length > 6, f1.goal);
+ok('X: card carries a learning point', !!f1.learning && f1.learning.length > 8);
+ok('X: card carries progress', /^\d+ \/ 19$/.test(f1.progress), f1.progress);
+ok('X: card avoids the old dead wording', src.indexOf('未记</li>') === -1);
+ok('X: missing record says how to add it', f1.record === null && /终页记校记时添加/.test(f1.recordHint));
+
+const filled = { cleared: { 'r-c-major': true }, mastery: { 'r-c-major': 'proficient' }, signed: '甲',
+  records: { quarry: { choice: '按五度往上数最稳' } }, evidence: { 'r-c-major': { hints: 0, faults: 0 } },
+  scale: { 'r-c-major': { sel: [0, 2, 4, 5, 7, 9, 11], tonic: 0 } } };
+const f2 = m.roomCardFacts(filled, 'r-c-major');
+ok('X: signed name is used', f2.name === '甲');
+ok('X: chosen record is shown', f2.record === '按五度往上数最稳');
+ok('X: zero-hint run says so', f2.evidence === '零提示、一次通过', f2.evidence);
+ok('X: scale summary lists real pitch classes', /C D E F G A B/.test(f2.summary), f2.summary);
+ok('X: scale summary names the tonic', /主音 C/.test(f2.summary));
+ok('X: summary is null before any work', m.roomResultSummary({ id: 'r-c-major', kind: 'scale' }, { scale: {} }) === null);
+
+const cpSum = m.roomResultSummary({ id: 'r-cp1', kind: 'counterpoint', cp: 0 },
+  { cp: { 'r-cp1': { slots: m.LEVELS[0].reference } } });
+ok('X: counterpoint summary is judged, not guessed', /10 \/ 10 个音已补/.test(cpSum) && /无违例/.test(cpSum), cpSum);
+const rhSum = m.roomResultSummary({ id: 'r-meter', kind: 'rhythm' },
+  { rhythm: { 'r-meter': { bars: [[{ len: 4 }, { len: 4 }], [{ len: 8 }]] } } });
+ok('X: rhythm summary shows the bars', rhSum === '4 4 ｜ 8', rhSum);
+const hSum = m.roomResultSummary({ id: 'r-func', kind: 'harmony' },
+  { harmony: { 'r-func': { chosen: [{ rn: 'I' }, { rn: 'IV' }, { rn: 'V' }] } } });
+ok('X: harmony summary is the chosen chain', hSum === 'I → IV → V', hSum);
+const pSum = m.roomResultSummary({ id: 'r-doowop', kind: 'pop', chords: [{ rn: 'I' }, { rn: 'vi' }, { rn: 'IV' }] },
+  { pop: { 'r-doowop': { pos: 1, step: 2 } } });
+ok('X: pop summary counts real steps', /已接 2 步/.test(pSum), pSum);
+const cmSum = m.roomResultSummary({ id: 'r-compass1', kind: 'compass', compass: { from: { pc: 0, mode: 'M' } } },
+  { compass: { 'r-compass1': { pc: 7, mode: 'M', path: ['fifth', 'fifth'] } } });
+ok('X: compass summary shows the walk', /2 步/.test(cmSum), cmSum);
+const setSum = m.roomResultSummary({ id: 'r-normal', kind: 'set', mode: 'normal' },
+  { set: { 'r-normal': { picked: [0, 4, 7] } } });
+ok('X: set summary lists the arrangement', /排列：C E G/.test(setSum), setSum);
+const formSum = m.roomResultSummary({ id: 'r-theme', kind: 'form' },
+  { form: { 'r-theme': { labels: { 0: 'A', 1: 'B' }, boundaries: [8] } } });
+ok('X: form summary uses stored labels', /A B/.test(formSum) && /1 条分界/.test(formSum), formSum);
+ok('X: every playable room has a learning point', playable.every((r) => m.roomLearnPoint(r).length > 8));
+ok('X: card markup shows the four rows',
+  src.indexOf('>本关任务</span>') !== -1 && src.indexOf('>我做的</span>') !== -1 && src.indexOf('>学到的</span>') !== -1 && src.indexOf('>校记</span>') !== -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {

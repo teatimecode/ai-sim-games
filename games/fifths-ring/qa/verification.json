@@ -1007,5 +1007,93 @@
       "人耳听检",
       "校记卡重开渲染"
     ]
+  },
+  "productionFixes2026_11_24": {
+    "A_confirmed": [
+      "地图热区：在采石场节点圆心与化身中心两点做 elementFromPoint，命中都是 city-node 圆圈而不是化身；foreignObject pointer-events=none、aria-hidden=true，节点 tabindex=0、role=button、aria-label=「采石场，已完成 0 / 5」",
+      "骨架试听：r-meter 空白作答（两小节都空）调用听骨架，创建 128 个振荡器、时长 3.2 秒、AudioContext 状态 running",
+      "下一关标签：19 间逐间调用 nextLabelFor，首间得「下一关：把桥板铺满」、末间得「回到环城」；pendingRecord 时得「记这一区的校记」",
+      "结算按钮：通过态结算层出现主按钮「下一关：升号从哪来」（btn-ink），另有「存这张校记卡」与「回环城」"
+    ],
+    "B_statePipeline": [
+      "键盘 Enter/Space 激活城区：节点可聚焦、处理函数已注册，但 sandbox press_key 返回 502，未做真实按键验证",
+      "下一关点击后实际跳转与存档写入：按钮渲染与标签已验证，点击因 sandbox 502 未完成"
+    ],
+    "C_unverified": [
+      "生产者 URL https://teatime.lucki.cn/ai-sim-games/games/fifths-ring/ 只能在合并后的 commit 看到，本轮未在生产验证",
+      "390/768 两种宽度下的真实触控与 hover",
+      "人耳听检"
+    ],
+    "sandboxNote": "browser_click 与 press_key 在房间内仍 502，与本次修复无关"
+  },
+  "cardUx2026_11_24": {
+    "A_confirmed": [
+      "结算首屏出现说明：「…可打印或分享。它不是存档——你的进度已经自动保存，不带它也能继续。」",
+      "按钮层级：带走这张校记卡 / 打印 预览 / 下载 HTML 均为 btn-quiet；下一关为 btn-ink 主按钮",
+      "展开预览：点击后 preview.hidden=false、注入 1327 字符含 Avatar 的卡片、按钮文案变为「收起预览」",
+      "下载回执：出现「已生成「五度环-校记卡-十二块石头.html」（HTML 文件，用浏览器打开或打印）。如果浏览器拦下了下载，用「打印 / 预览」另存。」",
+      "390 宽：页面溢出 0、sheet 右边界 366、预览右边界 325、卡片宽 260、三个按钮高 44",
+      "继续下一关：真实点击「下一关：把桥板铺满」后 veil 关闭、进入 r-meter、localStorage 中 cleared=[r-c-major]、mastery={r-c-major: proficient}",
+      "收起：再点一次按钮 preview.hidden=true、innerHTML 清空、按钮回到「带走这张校记卡」",
+      "刷新：重载后仍停在 r-meter，cleared 与 mastery 保留，结算层不残留、卡区块不残留",
+      "窄屏：768 下卡片 438 宽、预览横向滚动 0、页面溢出 0；390 下卡片 260 宽、按钮高 44、溢出 0"
+    ],
+    "B_statePipeline": [
+      "展开/下载两个点击由脚本触发（sandbox 房间内真实指针不可用），非人工点击"
+    ],
+    "C_unverified": [
+      "真实手机下载拦截与系统下载面板",
+      "真实设备 360/412",
+      "打印分页",
+      "生产 URL（需合并 PR #5）"
+    ],
+    "note": "本轮未改历史测试数字；自动测试 661 → 698",
+    "fixed_after_this_round": "预览卡原本固定 180mm 导致 768 下横向滚动 242px，已改为 width:100%/max-width:680px 并加 900px 断点"
+  },
+  "cardContent2026_11_24": {
+    "source": "真实生产反馈：卡片出现「这一页由（留白）掌握·理解」「这一页的校记：未记」",
+    "A_confirmed": [
+      "首次通过无署名无校记：卡片显示 采石场 · 十二块石头 · 第 1 / 19 关、记谱学徒（未署名）+「完成全城校记后可在终页署名」、理解 + 提示 2 次、修正 1 次、本关任务原文、我做的「C D E F G A B；主音 C」、学到的白话句、尚未添加校记 + 何时添加",
+      "有署名有校记：显示「甲」「已署名」「迁移」「零提示、一次通过」「按五度往上数最稳」",
+      "旧文案「未记」不再出现（字符串检查 false）",
+      "390 宽：卡片 260 宽、四行高度 61/20/61/60、预览滚动 0、页面溢出 0"
+    ],
+    "B_statePipeline": [
+      "预览与下载仍由脚本触发，房间正文区真实点击仍 502"
+    ],
+    "C_unverified": [
+      "真实手机排版与下载面板",
+      "打印分页",
+      "生产 URL（需合并 PR #5）"
+    ],
+    "tests": "722 passed / 0 failed"
+  },
+  "pr5Recheck2026_11_25": {
+    "baseline": {
+      "branch_head": "efd0f6da44e04940b992681cf7d9fba5603acc08",
+      "main": "c11dd32",
+      "remote_same": true,
+      "worktree": "clean",
+      "main_only_overlap": []
+    },
+    "A_confirmed": [
+      "热区 1280：节点圆心命中 quarry，化身中心命中 svg（穿透），节点 aria-label「采石场，已完成 0 / 5」、role=button、tabindex=0",
+      "热区 768：节点圆心 quarry、化身中心 svg、页面溢出 0",
+      "热区 390：节点圆心 quarry、化身中心 svg；真实点击节点后 state.district=quarry",
+      "下一关真实点击（上一轮）：btn-ink 点击后进 r-meter，cleared/mastery 写入 localStorage",
+      "下一关边界：重复通关同一间不改变下一关；已完成的房被跳过（倒数第二间 → r-doowop）；末间标签「回到环城」"
+    ],
+    "B_statePipeline": [
+      "键盘 Enter/Space：节点可聚焦、keydown 处理已注册，browser_press_key 仍 502，真实按键未验证",
+      "房间正文区点击仍 502（骨架试听按钮、作答控件）"
+    ],
+    "C_unverified": [
+      "真实手机（360/390/412 真机）",
+      "打印分页",
+      "生产 URL（PR #5 未合并）",
+      "19 间真实指针闭环",
+      "五项人耳听检"
+    ],
+    "tests": "722 passed / 0 failed"
   }
 }
