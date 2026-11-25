@@ -2539,14 +2539,14 @@ function renderTourEntry() {
     return;
   }
   var plan = buildTour(state);
-  var btn = mkBtn(plan.ok ? '三关巡演 · 约 5 分钟' : '三关巡演 · 需先校完 3 间', 'btn btn-mini', startTour);
+  var btn = mkBtn(plan.ok ? '复习巡演 · 三关（约 5 分钟）' : '复习巡演 · 需先校完 3 间', 'btn btn-mini', startTour);
   btn.id = 'tourStart';
   btn.disabled = !plan.ok;
   host.appendChild(btn);
   if (!plan.ok) {
     var hint = document.createElement('span');
     hint.className = 'tour-hint';
-    hint.textContent = '已有 ' + plan.have + ' / 3 间';
+    hint.textContent = '已有 ' + plan.have + ' / 3 间：先在地图里任选一间校完，再回来就能组巡演。';
     host.appendChild(hint);
   }
 }
@@ -4206,7 +4206,7 @@ function renderRoom() {
   body.innerHTML = '';
   actions.innerHTML = '';
   var pdef = predictFor(room);
-  if (pdef && !room.isVariant) {
+  if (pdef) {
     body.appendChild(buildPredictBox(room, pdef));
   }
 
@@ -5780,11 +5780,19 @@ function buildTour(s) {
   if (!weak || !prof || !cross) {
     return { ok: false, reason: 'insufficient', have: pool.length, need: 3, pool: pool };
   }
+  var weakLabel = masteryOf(s, weak.id) ? MASTERY_LABEL[masteryOf(s, weak.id)] : '未记录';
   return {
     ok: true,
     rooms: [weak.id, prof.id, cross.id],
     slots: ['weak', 'proficient', 'cross'],
-    titles: [weak.title, prof.title, cross.title]
+    titles: [weak.title, prof.title, cross.title],
+    variantAt: variantSupports(cross) ? VARIANT_SHIFT : 0,
+    reasons: [
+      '薄弱项：' + weak.title + '，目前记录是「' + weakLabel + '」，先补这一层。',
+      '熟练项：' + prof.title + '，你已经稳过，用来稳住手感。',
+      (variantSupports(cross) ? '跨域迁移项：' : '跨域新材料项：') + cross.title + '，换个城区' +
+        (variantSupports(cross) ? '并用变式题' : '并换材料') + '，验一次真迁移。'
+    ]
   };
 }
 
@@ -5815,7 +5823,8 @@ function startTour() {
     hintsUsed: 0,
     faults: 0,
     before: plan.rooms.map(function (id) { return { id: id, mastery: masteryOf(state, id) }; }),
-    variantAt: plan.rooms[2] && variantSupports(ROOM_INDEX[plan.rooms[2]]) ? VARIANT_SHIFT : 0,
+    variantAt: plan.variantAt || 0,
+    reasons: plan.reasons || [],
     attempt: { hints: 0, faults: 0 }
   };
   saveState();
@@ -5830,7 +5839,10 @@ function tourPass(room) {
   var slot = t.slots[t.index];
   var after = masteryAfterPass(before, ev, slot === 'cross');
   if (masteryRank(state, room.id) < MASTERY_ORDER[after]) state.mastery[room.id] = after;
+  var pf = predictFeedback(room);
   t.results.push({ id: room.id, title: room.title, hints: ev.hints, faults: ev.faults, before: before, after: after,
+    predicted: !!(state.predict && state.predict[room.id] && state.predict[room.id].choice),
+    predictHit: !!(pf && pf.hit),
     slot: slot, variant: !!(state.variant && state.variant.id === room.id) });
   t.hintsUsed += ev.hints;
   t.faults += ev.faults;
@@ -5858,19 +5870,27 @@ function tourSummary() {
   var lines = t.results.map(function (r, i) {
     var b = r.before ? MASTERY_LABEL[r.before] : '未记录';
     var arrow = r.before === r.after ? b : b + ' → ' + MASTERY_LABEL[r.after];
-    return '第 ' + (i + 1) + ' 关 ' + r.title + ' ｜ ' + TOUR_SLOT_LABEL[t.slots[i]] + ' ｜ 提示 ' + r.hints + ' 次 ｜ ' + arrow;
+    var kind = r.variant ? '迁移题' : '原题';
+    var pmark = r.predicted ? (r.predictHit ? '预测命中' : '预测未中') : '未预测';
+    return '第 ' + (i + 1) + ' 关 ' + r.title + ' ｜ ' + TOUR_SLOT_LABEL[t.slots[i]] + ' ｜ ' + kind +
+      ' ｜ 提示 ' + r.hints + ' 次 ｜ ' + pmark + ' ｜ ' + arrow;
   });
   var gained = t.results.filter(function (r) { return r.before !== r.after; }).length;
   var weakest = t.results.slice().sort(function (a, b) {
     return MASTERY_ORDER[a.after] - MASTERY_ORDER[b.after];
   })[0];
+  var answered = t.results.filter(function (r) { return r.predicted; }).length;
+  var hits = t.results.filter(function (r) { return r.predictHit; }).length;
+  var acc = answered ? Math.round(hits / answered * 100) + '%' : '未预测';
   var nextTip = weakest && weakest.after !== 'transfer'
     ? '下一步建议：再走一次「' + weakest.title + '」，这次不点提示，能把迁移层补上。'
     : '下一步建议：去地图挑一个还没到迁移的城区，按同样节奏再走三关。';
   showVerdict({
     eyebrow: '巡演毕',
     title: '三关走完',
-    paras: ['提示一共用了 ' + t.hintsUsed + ' 次，掌握变化 ' + gained + ' 处。'],
+    paras: ['提示一共用了 ' + t.hintsUsed + ' 次，掌握变化 ' + gained + ' 处，预测准确率 ' + acc +
+      (answered ? '（' + hits + ' / ' + answered + '）' : '') + '。',
+      '掌握度只认真实证据：理解来自用过提示或示范，熟练来自零提示零违规，迁移只来自跨域项零提示零违规。'],
     list: lines.concat([nextTip]),
     actions: [
       { label: '回地图', cls: 'btn', fn: function () { hideVerdict(); endTour(); renderMap(); } },
@@ -5912,10 +5932,12 @@ function tourBarMarkup() {
   var label = '巡演 ' + (Math.min(t.index + 1, 3)) + '/3';
   var slot = TOUR_SLOT_LABEL[t.slots[t.index]] || '';
   var done = t.results.some(function (r) { return cur && r.id === cur.id; });
+  var kind = (state.variant && state.variant.id === (cur && cur.id)) ? '迁移题' : '原题';
   var text = done
     ? '这一关过了 · 提示 ' + ev.hints + ' 次'
-    : label + ' · ' + slot + (cur ? ' · ' + cur.title : '') + ' · 本关提示 ' + ev.hints + ' 次';
-  return { text: text, done: done, index: t.index };
+    : label + ' · ' + slot + ' · ' + kind + (cur ? ' · ' + cur.title : '') + ' · 本关提示 ' + ev.hints + ' 次';
+  var why = t.reasons && t.reasons[t.index] ? t.reasons[t.index] : '';
+  return { text: text, done: done, index: t.index, why: why, kind: kind };
 }
 
 // 结算里的纪念卡：先解释、再预览，下载是次要出口
@@ -5993,6 +6015,12 @@ function renderTourBar() {
   label.className = 'tour-bar-text';
   label.textContent = info.text;
   host.appendChild(label);
+  if (info.why) {
+    var why = document.createElement('span');
+    why.className = 'tour-bar-why';
+    why.textContent = info.why;
+    host.appendChild(why);
+  }
   if (info.done) {
     var go = mkBtn(state.tour.done ? '看总结' : '下一关', 'btn btn-mini', tourAdvance);
     host.appendChild(go);

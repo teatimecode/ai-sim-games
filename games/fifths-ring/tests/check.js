@@ -818,7 +818,7 @@ ok('S: four slice rooms are defined', m.SLICE_ROOMS.length === 4);
 });
 ok('S: prediction has options', m.predictFor({ id: 'r-cp1' }).options.length >= 2);
 ok('S: skipped prediction is allowed', src.indexOf('function skipPredict') !== -1 && src.indexOf('跳过预测') !== -1);
-ok('S: prediction does not block the room', src.indexOf('if (pdef && !room.isVariant)') !== -1);
+ok('S: prediction is offered in variants too', src.indexOf('if (pdef || room.isVariant)') !== -1 || src.indexOf('if (pdef) {') !== -1);
 ok('S: prediction is saved with progress', src.indexOf('state.predict') !== -1);
 
 const cpPredict = m.predictActual({ id: 'r-cp1', kind: 'counterpoint', cp: 0 });
@@ -894,6 +894,24 @@ ok('F2: original form room is untouched', formRoom.form.point.bar !== 6 || formR
 ok('S2: skipping prediction is recorded without blocking', src.indexOf('skipped: true') !== -1);
 ok('S2: failure path keeps the retry action', src.indexOf('function formSubmit') !== -1);
 ok('S2: transfer still needs the cross slot', src.indexOf("masteryAfterPass(before, ev, slot === 'cross')") !== -1);
+
+/* ---------- 29. 复习巡演第二版 ---------- */
+const tourState = { cleared: {}, mastery: {}, tourRuns: 0 };
+playable.slice(0, 5).forEach((r) => { tourState.cleared[r.id] = true; });
+tourState.mastery[playable[0].id] = 'understand';
+tourState.mastery[playable[1].id] = 'proficient';
+const plan2 = m.buildTour(tourState);
+ok('T2: tour explains every pick', plan2.reasons.length === 3 && plan2.reasons.every((r) => r.length > 8));
+ok('T2: reasons name the slots', /薄弱项/.test(plan2.reasons[0]) && /熟练项/.test(plan2.reasons[1]) && /迁移|新材料/.test(plan2.reasons[2]));
+ok('T2: variant is announced before entering', plan2.variantAt === m.VARIANT_SHIFT || plan2.variantAt === 0);
+ok('T2: cross slot labels the question kind', src.indexOf("? '迁移题' : '原题'") !== -1);
+ok('T2: tour bar carries the reason', src.indexOf("why.className = 'tour-bar-why'") !== -1);
+ok('T2: summary reports prediction accuracy', src.indexOf('预测准确率') !== -1);
+ok('T2: summary states where mastery comes from', src.indexOf('迁移只来自跨域项零提示零违规') !== -1);
+ok('T2: per-room line marks prediction result', src.indexOf("r.predictHit ? '预测命中' : '预测未中'") !== -1);
+ok('T2: entry says what the tour is', src.indexOf('复习巡演 · 三关（约 5 分钟）') !== -1);
+ok('T2: empty state explains how to unlock', src.indexOf('先在地图里任选一间校完') !== -1);
+ok('T2: no coins or leaderboard added', src.indexOf('coin') === -1 && src.indexOf('leaderboard') === -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
