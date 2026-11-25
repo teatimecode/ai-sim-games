@@ -783,8 +783,8 @@ const scaleVerdict = (function () {
 ok('V: variant target is a full set', scaleVerdict);
 ok('V: variant stays inside the ring', vScale.target.pcs.every((pc) => pc >= 0 && pc < 12));
 
-const vCpRoom = playable.find((r) => r.kind === 'counterpoint');
-ok('V: counterpoint is not faked as a variant', m.variantSupports(vCpRoom) === false && m.makeVariant(vCpRoom, 2) === vCpRoom);
+const vCpPlain = playable.find((r) => r.kind === 'counterpoint');
+ok('V: counterpoint variant keeps its own data', m.variantSupports(vCpPlain) === true && !!m.makeVariant(vCpPlain, 2).variantLevel);
 const vCompassRoom = playable.find((r) => r.kind === 'compass');
 const vCompass = m.makeVariant(vCompassRoom, 2);
 ok('V: compass variant transposes both keys',
@@ -839,6 +839,36 @@ ok('S: compare button appears on failure', src.indexOf("'对照这一处'") !== 
 ok('S: compare resets when entering a room', src.indexOf('state.localCompare = false') !== -1);
 const markFn = src.slice(src.indexOf('function renderMarkList'), src.indexOf('function renderMarkList') + 2200);
 ok('S: compare line is rendered inside the mark list', markFn.indexOf('local-compare') !== -1);
+
+/* ---------- 27. 切片房变式有解 ---------- */
+const vCpBase = playable.find((r) => r.kind === 'counterpoint');
+const vCp = m.makeVariant(vCpBase, 2);
+ok('V2: counterpoint variant ships its own level', !!vCp.variantLevel);
+ok('V2: cantus is transposed', vCp.variantLevel.cantus[0] === m.LEVELS[vCpBase.cp].cantus[0] + 2);
+ok('V2: reference is transposed', vCp.variantLevel.reference[0] === m.LEVELS[vCpBase.cp].reference[0] + 2);
+ok('V2: shifted reference still passes the judge',
+  m.judge(vCp.variantLevel, vCp.variantLevel.reference).violations.length === 0);
+ok('V2: the original room keeps its own level', vCpBase.variantLevel === undefined);
+
+const vHarRoom = playable.find((r) => r.kind === 'harmony');
+const vHar = m.makeVariant(vHarRoom, 2);
+ok('V2: harmony variant shifts the tonic', vHar.tonic === (vHarRoom.tonic + 2) % 12);
+ok('V2: harmony variant keeps a legal answer', (function () {
+  return vHar.situations.every(function (s) {
+    return s.options.some(function (o) { return m.harmonyIssues(s.prev, o, vHar.tonic).length === 0; });
+  });
+})());
+
+const vSetRoom = playable.find((r) => r.kind === 'set');
+const vSet = m.makeVariant(vSetRoom, 2);
+ok('V2: set variant shifts the members', vSet.members.every((pc, i) => pc === (vSetRoom.members[i] + 2) % 12));
+ok('V2: set variant keeps the tightest span',
+  m.minSpanOf(vSet.members).span === m.minSpanOf(vSetRoom.members).span);
+
+ok('V2: slice rooms can offer a variant',
+  ['r-cp1', 'r-func', 'r-theme', 'r-normal'].filter(function (id) {
+    return m.variantSupports(playable.find(function (r) { return r.id === id; }));
+  }).length >= 3);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {

@@ -717,7 +717,7 @@ function closeWarmup() {
 /* 每类房间的标准答案，用于失败后的对照试听 */
 function referencePlan(room) {
   if (room.kind === 'counterpoint') {
-    var lv = LEVELS[room.cp];
+    var lv = cpLevelOf(room);
     return lv && lv.reference ? { type: 'exercise', level: lv, slots: lv.reference } : null;
   }
   if (room.kind === 'scale') return { type: 'scale', pcs: room.target.pcs, tonic: room.target.tonic };
@@ -791,7 +791,7 @@ function playOwn(room) {
   var c = ensureAudio();
   if (!c) return 0;
   if (room.kind === 'counterpoint') {
-    var lv = LEVELS[room.cp], cp = cpState(room);
+    var lv = cpLevelOf(room), cp = cpState(room);
     return playCpOnce(lv, cp.slots);
   }
   if (room.kind === 'rhythm') {
@@ -811,7 +811,7 @@ function playOwn(room) {
 
 function firstDiffOf(room) {
   if (room.kind === 'counterpoint') {
-    var r = judge(LEVELS[room.cp], cpState(room).slots);
+    var r = judge(cpLevelOf(room), cpState(room).slots);
     return r.violations.length ? { slot: r.violations[0].slot, label: '第 ' + (r.violations[0].slot + 1) + ' 音 · ' + r.violations[0].code } : null;
   }
   if (room.kind === 'rhythm') {
@@ -1004,7 +1004,7 @@ function roomResultSummary(room, s) {
   }
   if (room.kind === 'counterpoint') {
     var cp = (s.cp || {})[room.id];
-    var lv = LEVELS[room.cp];
+    var lv = cpLevelOf(room);
     if (!cp || !cp.slots || !lv) return null;
     var filled = cp.slots.filter(function (v) { return v != null; }).length;
     if (!filled) return null;
@@ -1176,7 +1176,7 @@ function downloadDiploma() {
 function roomHasFailure(room) {
   if (room.kind === 'counterpoint') {
     var c = cpState(room);
-    return c.attempts > 0 && judge(LEVELS[room.cp], c.slots).violations.length > 0;
+    return c.attempts > 0 && judge(cpLevelOf(room), c.slots).violations.length > 0;
   }
   if (room.kind === 'scale') { var s = scaleState(room); return !!(s.checked && s.error); }
   if (room.kind === 'harmony') { var h = harmonyState(room); return !!h.bad; }
@@ -3914,7 +3914,7 @@ function roomProgress(room) {
   var out = { progress: '', next: '', ready: true, hint: '' };
 
   if (room.kind === 'counterpoint') {
-    var lv = LEVELS[room.cp], c = cpState(room);
+    var lv = cpLevelOf(room), c = cpState(room);
     var total = totalSlots(lv), filled = 0;
     c.slots.forEach(function (x) { if (x != null) filled++; });
     var left = total - filled;
@@ -4317,7 +4317,7 @@ function skipPredict(room) {
 function predictActual(room) {
   if (!room) return null;
   if (room.kind === 'counterpoint') {
-    var r = judge(LEVELS[room.cp], cpState(room).slots);
+    var r = judge(cpLevelOf(room), cpState(room).slots);
     if (!r.violations.length) return { id: 'ok', text: '这次没有违例' };
     var code = r.violations[0].code;
     return { id: /FIFTH|OCT/.test(code) ? 'fifth' : 'cross', text: '第一处是 ' + code, slot: r.violations[0].slot };
@@ -4369,7 +4369,7 @@ function localCompareText(room, diff) {
   var d = diff || state.diff;
   if (!room || !d) return null;
   if (room.kind === 'counterpoint') {
-    var lv = LEVELS[room.cp];
+    var lv = cpLevelOf(room);
     var i = d.slot;
     var j = Math.max(0, i - 1);
     var mine = [j, i].map(function (k) { return cpState(room).slots[k] == null ? '空' : NAMES[cpState(room).slots[k] % 12]; }).join(' → ');
@@ -4513,13 +4513,13 @@ function mkBtn(label, cls, fn, kbd) {
 
 function cpState(room) {
   if (!state.cp[room.id]) {
-    state.cp[room.id] = { slots: blankSlots(LEVELS[room.cp]), activeSlot: 0, attempts: 0 };
+    state.cp[room.id] = { slots: blankSlots(cpLevelOf(room)), activeSlot: 0, attempts: 0 };
   }
   return state.cp[room.id];
 }
 
 function renderCpRoom(room, body, barUi) {
-  var lv = LEVELS[room.cp];
+  var lv = cpLevelOf(room);
   var c = cpState(room);
 
   var r = judge(lv, c.slots);
@@ -4612,7 +4612,7 @@ function renderCpRoom(room, body, barUi) {
 }
 
 function cpNextEmpty(room, from) {
-  var lv = LEVELS[room.cp], c = cpState(room), n = totalSlots(lv);
+  var lv = cpLevelOf(room), c = cpState(room), n = totalSlots(lv);
   for (var i = 1; i <= n; i++) {
     var idx = (from + i) % n;
     if (c.slots[idx] == null) return idx;
@@ -4622,7 +4622,7 @@ function cpNextEmpty(room, from) {
 
 function cpPlace(room, midi) {
   ensureAudio();
-  var lv = LEVELS[room.cp], c = cpState(room);
+  var lv = cpLevelOf(room), c = cpState(room);
   var slot = c.activeSlot;
   c.slots[slot] = midi;
   var bar = lv.species === 1 ? slot : Math.floor(slot / 2);
@@ -4634,7 +4634,7 @@ function cpPlace(room, midi) {
 }
 
 function cpSubmit(room) {
-  var lv = LEVELS[room.cp], c = cpState(room);
+  var lv = cpLevelOf(room), c = cpState(room);
   var empt = emptySlotsOf(lv, c.slots);
   if (empt.length) {
     c.activeSlot = empt[0];
@@ -6036,8 +6036,13 @@ function goNext(room) {
 // 受控变式：把整道题整体移调，规则只看音程，因此有解性不变
 var VARIANT_SHIFT = 2;
 
+function cpLevelOf(room) {
+  if (room && room.variantLevel) return room.variantLevel;
+  return LEVELS[(room || {}).cp];
+}
+
 function variantSupports(room) {
-  return !!room && (room.kind === 'scale' || room.kind === 'compass');
+  return !!room && (room.kind === 'scale' || room.kind === 'compass' || room.kind === 'counterpoint' || room.kind === 'harmony' || room.kind === 'set');
 }
 
 function makeVariant(room, shift) {
@@ -6054,6 +6059,42 @@ function makeVariant(room, shift) {
       c.guide.done = room.guide.done
         .replace(room.target.label, c.target.label)
         .replace(/主音定在 [A-G][♯♭]?/, '主音定在 ' + NAMES[c.target.tonic]);
+    }
+  } else if (c.kind === 'counterpoint') {
+    var lv = JSON.parse(JSON.stringify(LEVELS[room.cp]));
+    lv.cantus = lv.cantus.map(function (m) { return m + shift; });
+    lv.palette = lv.palette.map(function (m) { return m + shift; });
+    if (lv.reference) lv.reference = lv.reference.map(function (m) { return m + shift; });
+    c.variantLevel = lv;
+    if (c.guide) {
+      c.guide = JSON.parse(JSON.stringify(room.guide));
+      c.guide.goal = room.guide.goal + '（变式：整条固定旋律上移 ' + shift + ' 个半音）';
+    }
+  } else if (c.kind === 'harmony') {
+    c.tonic = (room.tonic + shift) % 12;
+    c.situations = room.situations.map(function (sit) {
+      var cp2 = JSON.parse(JSON.stringify(sit));
+      if (cp2.prev) {
+        if (cp2.prev.pcs) cp2.prev.pcs = cp2.prev.pcs.map(function (pc) { return (pc + shift) % 12; });
+        if (typeof cp2.prev.lt === 'number') cp2.prev.lt = (cp2.prev.lt + shift) % 12;
+        if (typeof cp2.prev.seventh === 'number') cp2.prev.seventh = (cp2.prev.seventh + shift) % 12;
+      }
+      cp2.options = cp2.options.map(function (o) {
+        var oc = JSON.parse(JSON.stringify(o));
+        if (oc.pcs) oc.pcs = oc.pcs.map(function (pc) { return (pc + shift) % 12; });
+        return oc;
+      });
+      return cp2;
+    });
+    if (c.guide) {
+      c.guide = JSON.parse(JSON.stringify(room.guide));
+      c.guide.goal = room.guide.goal + '（变式：整条进行整体上移 ' + shift + ' 个半音）';
+    }
+  } else if (c.kind === 'set') {
+    c.members = room.members.map(function (pc) { return (pc + shift) % 12; });
+    if (c.guide) {
+      c.guide = JSON.parse(JSON.stringify(room.guide));
+      c.guide.goal = room.guide.goal + '（变式：这一组音整体上移 ' + shift + ' 个半音）';
     }
   } else {
     c.compass.from = { pc: (room.compass.from.pc + shift) % 12, mode: room.compass.from.mode };
@@ -6333,7 +6374,7 @@ function bindGlobal() {
     var room = ROOM_INDEX[state.roomId];
     if (room.kind !== 'counterpoint') return;
 
-    var lv = LEVELS[room.cp], c = cpState(room);
+    var lv = cpLevelOf(room), c = cpState(room);
     var n = totalSlots(lv);
     if (e.key >= '1' && e.key <= '9') {
       var i = parseInt(e.key, 10) - 1;
