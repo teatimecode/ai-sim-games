@@ -913,6 +913,49 @@ ok('T2: entry says what the tour is', src.indexOf('复习巡演 · 三关（约 
 ok('T2: empty state explains how to unlock', src.indexOf('先在地图里任选一间校完') !== -1);
 ok('T2: no coins or leaderboard added', src.indexOf('coin') === -1 && src.indexOf('leaderboard') === -1);
 
+/* ---------- 30. 我的校记档案 ---------- */
+const emptyA = m.archiveFacts({ cleared: {}, mastery: {}, evidence: {}, tourHistory: [] });
+ok('A2: empty archive is flagged', emptyA.empty === true && emptyA.total === 0);
+ok('A2: empty archive has no history', emptyA.history.length === 0);
+
+const archState = { cleared: {}, mastery: {}, evidence: {}, tourHistory: [] };
+playable.forEach((r) => { archState.cleared[r.id] = true; });
+archState.mastery[playable[0].id] = 'understand';
+archState.mastery[playable[1].id] = 'proficient';
+archState.mastery[playable[2].id] = 'transfer';
+archState.evidence[playable[0].id] = { hints: 2, faults: 1 };
+const arc = m.archiveFacts(archState);
+ok('A2: all 19 cleared rooms are listed', arc.total === 19 && arc.rows.length === 19);
+ok('A2: rooms are grouped by mastery',
+  arc.counts.understand === 1 && arc.counts.proficient === 1 && arc.counts.transfer === 1 && arc.counts.none === 16);
+ok('A2: missing evidence is not invented', arc.rows.find((r) => r.id === playable[1].id).hints === null);
+ok('A2: recorded evidence is shown', arc.rows.find((r) => r.id === playable[0].id).hints === 2);
+ok('A2: migration flag follows mastery', arc.rows.find((r) => r.id === playable[2].id).migrated === true);
+ok('A2: missing summary says 未记录', arc.rows.some((r) => r.summary === '未记录'));
+
+ok('A2: no history is not faked', m.archiveFacts({ cleared: {}, tourHistory: [] }).history.length === 0);
+const withHist = { cleared: {}, tourHistory: [
+  { at: 1, outcome: 'done', rooms: [{ title: 'A', slot: 'weak', variant: false }], hints: 1, predicted: 1, hits: 1, moved: 1 },
+  { at: 2, outcome: 'left', rooms: [{ title: 'B', slot: 'cross', variant: true }], hints: 0, predicted: 0, hits: 0, moved: 0 }
+] };
+ok('A2: history keeps the latest three', (function () {
+  const four = { cleared: {}, tourHistory: [1, 2, 3, 4].map((i) => ({ at: i, outcome: 'done', rooms: [], hints: 0, predicted: 0, hits: 0, moved: 0 })) };
+  return m.archiveFacts(four).history.length === 3;
+})());
+ok('A2: history marks a mid-way exit', m.archiveFacts(withHist).history.some((h) => h.outcome === '中途退出'));
+ok('A2: history names the slot and variant', (function () {
+  const h = m.archiveFacts(withHist).history[0].rooms[0];
+  return h.slot === '跨域项' && h.variant === true;
+})());
+
+ok('A2: filters exist for district and mastery', src.indexOf("'按城区筛选'") !== -1 && src.indexOf("'按掌握层级筛选'") !== -1);
+ok('A2: archive is reachable from the map', src.indexOf("mkBtn('我的校记档案'") !== -1);
+ok('A2: archive is reachable from the ending', src.indexOf("endActs.appendChild(mkBtn('我的校记档案'") !== -1);
+ok('A2: retrain keeps the main line intact', src.indexOf('enterRoom(row.id)') !== -1 && src.indexOf('state.cleared[row.id] = false') === -1);
+ok('A2: archive is not forced on the player', src.indexOf('function showArchive()') !== -1 && src.indexOf('renderMap();\n}') !== -1);
+ok('A2: partial data says 未记录', src.indexOf('hints == null ? \'未记录\'') !== -1);
+ok('A2: tour history is saved', src.indexOf('tourHistory: state.tourHistory') !== -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));

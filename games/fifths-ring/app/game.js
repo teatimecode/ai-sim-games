@@ -2172,7 +2172,8 @@ var state = {
   evidence: {},
   tour: null,
   tourRuns: 0,
-  variant: null
+  variant: null,
+  tourHistory: []
 };
 
 function totalSlots(level) {
@@ -2196,7 +2197,7 @@ function saveState() {
       hintTier: state.hintTier, records: state.records,
       compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone,
       mastery: state.mastery, evidence: state.evidence, tour: state.tour, tourRuns: state.tourRuns,
-      variant: state.variant
+      variant: state.variant, tourHistory: state.tourHistory
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -2216,6 +2217,7 @@ function loadState() {
     if (d.tour && Array.isArray(d.tour.rooms) && d.tour.rooms.length === 3) state.tour = d.tour;
     if (Number.isInteger(d.tourRuns)) state.tourRuns = d.tourRuns;
     if (d.variant && typeof d.variant === 'object') state.variant = d.variant;
+    if (Array.isArray(d.tourHistory)) state.tourHistory = d.tourHistory.slice(-3);
     if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
@@ -2393,6 +2395,194 @@ function nextRecommended(s) {
   return null;
 }
 
+
+/* ================= 17. 我的校记档案 ================= */
+
+function archiveFacts(s) {
+  s = s || state;
+  var cleared = s.cleared || {};
+  var evidence = s.evidence || {};
+  var rows = ROOMS.filter(function (r) { return r.kind !== 'locked' && cleared[r.id]; }).map(function (r) {
+    var m = (s.mastery && s.mastery[r.id]) || null;
+    var ev = evidence[r.id] || null;
+    var summary = roomResultSummary(r, s);
+    return {
+      id: r.id,
+      title: r.title,
+      district: (districtById(r.district) || {}).name || '',
+      districtId: r.district,
+      mastery: m,
+      masteryLabel: m ? MASTERY_LABEL[m] : '未记录',
+      goal: (r.guide && r.guide.goal) || '',
+      summary: summary || '未记录',
+      hints: ev ? ev.hints : null,
+      faults: ev ? ev.faults : null,
+      migrated: m === 'transfer',
+      variantAvailable: variantSupports(r)
+    };
+  });
+  var byMastery = { understand: [], proficient: [], transfer: [], none: [] };
+  rows.forEach(function (row) { (byMastery[row.mastery || 'none']).push(row); });
+  var history = (s.tourHistory || []).slice(-3).reverse().map(function (h) {
+    return {
+      at: h.at,
+      outcome: h.outcome === 'done' ? '走完三关' : '中途退出',
+      rooms: (h.rooms || []).map(function (r) {
+        return { title: r.title, slot: TOUR_SLOT_LABEL[r.slot] || r.slot, variant: !!r.variant };
+      }),
+      hints: h.hints || 0,
+      predicted: h.predicted || 0,
+      hits: h.hits || 0,
+      moved: h.moved || 0
+    };
+  });
+  return {
+    total: rows.length,
+    rows: rows,
+    byMastery: byMastery,
+    counts: { understand: byMastery.understand.length, proficient: byMastery.proficient.length, transfer: byMastery.transfer.length, none: byMastery.none.length },
+    history: history,
+    empty: rows.length === 0
+  };
+}
+
+function archiveFiltered(facts) {
+  var f = state.archiveFilter || { district: 'all', mastery: 'all' };
+  return facts.rows.filter(function (row) {
+    if (f.district !== 'all' && row.districtId !== f.district) return false;
+    if (f.mastery !== 'all' && (row.mastery || 'none') !== f.mastery) return false;
+    return true;
+  });
+}
+
+function showArchive() {
+  state.view = 'archive';
+  renderArchive();
+  saveState();
+}
+
+function renderArchive() {
+  var facts = archiveFacts(state);
+  $('viewLanding').hidden = true;
+  $('viewMap').hidden = true;
+  $('viewRoom').hidden = true;
+  $('viewArchive').hidden = false;
+  $('btnBackMap').hidden = false;
+  $('btnLanding').hidden = false;
+  $('archiveMeta').textContent = facts.empty
+    ? '还没有记录'
+    : '已完成 ' + facts.total + ' / 19 · 理解 ' + facts.counts.understand + ' · 熟练 ' + facts.counts.proficient + ' · 迁移 ' + facts.counts.transfer + (facts.counts.none ? ' · 未记录 ' + facts.counts.none : '');
+
+  var body = $('archiveBody');
+  body.innerHTML = '';
+
+  if (facts.empty) {
+    var empty = document.createElement('div');
+    empty.className = 'archive-empty';
+    empty.textContent = '档案还是空的。校完第一间房，这一页会自动出现它的任务、做法和提示次数。';
+    body.appendChild(empty);
+  }
+
+  var bar = document.createElement('div');
+  bar.className = 'archive-filter';
+  var f = state.archiveFilter || { district: 'all', mastery: 'all' };
+  var ds = document.createElement('select');
+  ds.setAttribute('aria-label', '按城区筛选');
+  [['all', '全部城区']].concat(DISTRICTS.map(function (d) { return [d.id, d.name]; })).forEach(function (o) {
+    var opt = document.createElement('option');
+    opt.value = o[0]; opt.textContent = o[1];
+    if (f.district === o[0]) opt.selected = true;
+    ds.appendChild(opt);
+  });
+  ds.addEventListener('change', function () { state.archiveFilter = { district: ds.value, mastery: f.mastery }; renderArchive(); });
+  var ms = document.createElement('select');
+  ms.setAttribute('aria-label', '按掌握层级筛选');
+  [['all', '全部层级'], ['understand', '理解'], ['proficient', '熟练'], ['transfer', '迁移'], ['none', '未记录']].forEach(function (o) {
+    var opt = document.createElement('option');
+    opt.value = o[0]; opt.textContent = o[1];
+    if (f.mastery === o[0]) opt.selected = true;
+    ms.appendChild(opt);
+  });
+  ms.addEventListener('change', function () { state.archiveFilter = { district: f.district, mastery: ms.value }; renderArchive(); });
+  bar.appendChild(ds); bar.appendChild(ms);
+  body.appendChild(bar);
+
+  var list = archiveFiltered(facts);
+  if (!facts.empty && !list.length) {
+    var none = document.createElement('div');
+    none.className = 'archive-empty';
+    none.textContent = '这个筛选下没有记录。换个城区或层级看看。';
+    body.appendChild(none);
+  }
+
+  [['understand', '理解'], ['proficient', '熟练'], ['transfer', '迁移'], ['none', '未记录']].forEach(function (pair) {
+    var rows = list.filter(function (r) { return (r.mastery || 'none') === pair[0]; });
+    if (!rows.length) return;
+    var sec = document.createElement('section');
+    sec.className = 'archive-sec';
+    var h = document.createElement('h3');
+    h.textContent = pair[1] + '（' + rows.length + '）';
+    sec.appendChild(h);
+    rows.forEach(function (row) {
+      var card = document.createElement('article');
+      card.className = 'archive-card';
+      var t = document.createElement('div');
+      t.className = 'archive-card-title';
+      t.textContent = row.title + ' · ' + row.district;
+      card.appendChild(t);
+      var meta = document.createElement('div');
+      meta.className = 'archive-card-meta';
+      var bits = ['提示 ' + (row.hints == null ? '未记录' : row.hints + ' 次'),
+        '修正 ' + (row.faults == null ? '未记录' : row.faults + ' 次'),
+        row.migrated ? '已走过迁移题' : '未走过迁移题'];
+      meta.textContent = bits.join(' · ');
+      card.appendChild(meta);
+      var sum = document.createElement('div');
+      sum.className = 'archive-card-sum';
+      sum.textContent = '我做的：' + row.summary;
+      card.appendChild(sum);
+      var btn = mkBtn(row.variantAvailable ? '再练一遍（含变式）' : '再练一遍', 'btn btn-quiet btn-mini', function () {
+        state.archiveFilter = state.archiveFilter;
+        enterRoom(row.id);
+      });
+      card.appendChild(btn);
+      sec.appendChild(card);
+    });
+    body.appendChild(sec);
+  });
+
+  var hist = document.createElement('section');
+  hist.className = 'archive-sec';
+  var hh = document.createElement('h3');
+  hh.textContent = '巡演历史（最近 ' + facts.history.length + ' / 3）';
+  hist.appendChild(hh);
+  if (!facts.history.length) {
+    var hn = document.createElement('p');
+    hn.className = 'archive-note';
+    hn.textContent = '还没有巡演记录。走完一次三关或中途退出，这里才会出现条目。';
+    hist.appendChild(hn);
+  } else {
+    facts.history.forEach(function (h) {
+      var row = document.createElement('article');
+      row.className = 'archive-card';
+      var t2 = document.createElement('div');
+      t2.className = 'archive-card-title';
+      t2.textContent = h.outcome + ' · 提示 ' + h.hints + ' 次 · 预测 ' + (h.predicted ? (h.hits + '/' + h.predicted) : '未预测') + ' · 掌握变化 ' + h.moved;
+      row.appendChild(t2);
+      var ul = document.createElement('div');
+      ul.className = 'archive-card-meta';
+      ul.textContent = h.rooms.map(function (r) { return r.slot + '：' + r.title + (r.variant ? '（迁移题）' : ''); }).join(' · ');
+      row.appendChild(ul);
+      hist.appendChild(row);
+    });
+  }
+  body.appendChild(hist);
+
+  var acts = $('archiveActions');
+  acts.innerHTML = '';
+  acts.appendChild(mkBtn('回环城', 'btn', function () { renderMap(); }));
+}
+
 function renderMap() {
   state.view = 'map';
   state.view = 'map';
@@ -2512,8 +2702,23 @@ function renderMap() {
   }
 
   renderTourEntry();
+  renderArchiveEntry();
   renderDistrictPanel();
   saveState();
+}
+
+function renderArchiveEntry() {
+  var host = document.getElementById('archiveEntry');
+  if (!host) return;
+  host.innerHTML = '';
+  var facts = archiveFacts(state);
+  var b = mkBtn('我的校记档案', 'btn btn-quiet btn-mini', showArchive);
+  b.id = 'archiveBtn';
+  host.appendChild(b);
+  var note = document.createElement('span');
+  note.className = 'tour-hint';
+  note.textContent = facts.empty ? '校完第一间房后会有内容' : ('已记录 ' + facts.total + ' 间');
+  host.appendChild(note);
 }
 
 function renderTourEntry() {
@@ -5899,8 +6104,26 @@ function tourSummary() {
   });
 }
 
+function recordTourHistory(outcome) {
+  var t = state.tour;
+  if (!t || !t.results || !t.results.length) return;
+  var rec = {
+    at: Date.now(),
+    outcome: outcome,
+    rooms: t.results.map(function (r, i) {
+      return { id: r.id, title: r.title, slot: t.slots[i], variant: !!r.variant, after: r.after || null };
+    }),
+    hints: t.hintsUsed || 0,
+    predicted: t.results.filter(function (r) { return r.predicted; }).length,
+    hits: t.results.filter(function (r) { return r.predictHit; }).length,
+    moved: t.results.filter(function (r) { return r.before !== r.after; }).length
+  };
+  state.tourHistory = (state.tourHistory || []).concat([rec]).slice(-3);
+}
+
 function endTour() {
   if (!state.tour) return;
+  recordTourHistory('done');
   state.tourRuns = (state.tourRuns || 0) + 1;
   state.tour = null;
   state.variant = null;
@@ -5909,6 +6132,10 @@ function endTour() {
 
 function leaveTour() {
   if (!state.tour || !state.tour.active) return;
+  if (!state.tour.leftRecorded && state.tour.results && state.tour.results.length) {
+    recordTourHistory('left');
+    state.tour.leftRecorded = true;
+  }
   hideVerdict();
   state.tour.active = false;
   saveState();
@@ -6255,6 +6482,10 @@ function showEnding() {
   var records = state.records || {};
 
   showVerdict({ eyebrow: '终页', title: '记谱人', paras: [], actions: [], ending: true });
+  var endActs = document.getElementById('sheetActions');
+  if (endActs) {
+    endActs.appendChild(mkBtn('我的校记档案', 'btn btn-quiet', function () { hideVerdict(); showArchive(); }));
+  }
   var body = $('verdictBody');
   body.innerHTML = '';
 
@@ -6497,6 +6728,7 @@ if (typeof module !== 'undefined' && module.exports) {
     makeVariant: makeVariant, variantSupports: variantSupports, variantRoom: variantRoom, VARIANT_SHIFT: VARIANT_SHIFT,
     SLICE_ROOMS: SLICE_ROOMS, PREDICT_DEFS: PREDICT_DEFS, predictFor: predictFor, predictActual: predictActual,
     makeFormStructureVariant: makeFormStructureVariant, formJudge: formJudge,
+    archiveFacts: archiveFacts, archiveFiltered: archiveFiltered, recordTourHistory: recordTourHistory,
     predictFeedback: predictFeedback, localCompareText: localCompareText, explainLevels: explainLevels,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,

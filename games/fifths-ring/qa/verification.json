@@ -1224,5 +1224,23 @@
     ],
     "tests": "812 passed / 0 failed",
     "docs": "README、GAME_DESIGN、INFORMATION_ARCHITECTURE、CONTENT_ROADMAP、QA 均已同步"
+  },
+  "archive2026_11_25": {
+    "A_confirmed": [
+      "空态：cleared 为空时 archiveFacts.empty=true，历史为空",
+      "19 主线分栏：全清后 total=19，理解/熟练/迁移/未记录分别为 1/1/1/16",
+      "缺失证据不编造：无 evidence 的房间 hints=null，摘要为「未记录」",
+      "有证据显示真实次数：hints=2 如实显示",
+      "巡演历史：无历史为空；有记录时保留最近三条，中途退出标为「中途退出」",
+      "入口：地图与终页均有「我的校记档案」；再练只进房间，不改 cleared"
+    ],
+    "B_statePipeline": [
+      "档案页内真实点击筛选/再练未验证（房间与页面内点击沙箱 502）"
+    ],
+    "C_unverified": [
+      "真机窄屏与键盘操作",
+      "生产页面（需合并新 PR）"
+    ],
+    "tests": "831 passed / 0 failed"
   }
 }

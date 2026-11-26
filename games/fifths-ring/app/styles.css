@@ -714,3 +714,20 @@ body{
 .room-card .d-hint{display:block;font-style:normal;color:#8a7a68;font-size:11px;margin-top:2px}
 .room-card .d-verdict{margin-left:auto;text-align:right;font-size:11px;color:#7a6c5c}
 .room-card .d-verdict b{display:block;font-size:15px;color:#a3392a;letter-spacing:.1em}
+
+/* 我的校记档案 */
+.archive-entry{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
+.archive-paper{max-width:var(--paper-w,760px)}
+.archive-filter{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+.archive-filter select{min-height:36px;font-size:12px;padding:4px 8px;border:1px solid var(--line,#d8cdbd);border-radius:2px;background:#fff}
+.archive-sec{margin:14px 0}
+.archive-sec h3{font-size:13px;letter-spacing:.08em;margin:0 0 8px;color:#5a4e42}
+.archive-card{border:1px solid var(--line,#d8cdbd);border-radius:2px;padding:9px 11px;margin:0 0 8px;background:rgba(255,255,255,.55)}
+.archive-card-title{font-size:13px;margin-bottom:3px}
+.archive-card-meta{font-size:11px;color:#7a6c5a;margin-bottom:4px}
+.archive-card-sum{font-size:12px;line-height:1.6;color:#3b342c;margin-bottom:6px;word-break:break-word}
+.archive-empty,.archive-note{font-size:12px;line-height:1.7;color:#6f6252;padding:10px 12px;border:1px dashed #c9b9a4;border-radius:2px}
+@media (max-width:520px){
+  .archive-card{padding:8px}
+  .archive-filter select{flex:1 1 46%}
+}
