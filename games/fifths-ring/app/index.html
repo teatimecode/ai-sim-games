@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>五度环 · 一座由音程承重的城</title>
-<link rel="stylesheet" href="styles.css?v=36">
+<link rel="stylesheet" href="styles.css?v=37">
 </head>
 <body>
 <div class="desk">
@@ -86,6 +86,7 @@
       <div class="ring-host" id="cityHost"></div>
       <div class="city-audio" id="cityAudio"></div>
       <div class="tour-host" id="tourHost"></div>
+      <div class="archive-entry" id="archiveEntry"></div>
       <div class="city-note">相邻两块石相差一个纯五度。城区越往外，常音越弱。</div>
     </section>
     <aside class="margin-col">
@@ -95,6 +96,17 @@
         <span>角色与环城为虚构设定。</span>
       </div>
     </aside>
+  </main>
+
+  <main class="board archive" id="viewArchive" hidden>
+    <section class="paper archive-paper" aria-label="我的校记档案">
+      <div class="paper-head">
+        <h2>我的校记档案</h2>
+        <div class="paper-meta" id="archiveMeta">—</div>
+      </div>
+      <div id="archiveBody"></div>
+      <div class="controls" id="archiveActions"></div>
+    </section>
   </main>
 
   <main class="board" id="viewRoom" hidden>
@@ -184,6 +196,6 @@
   </footer>
 </div>
 <div class="diploma" id="diplomaHost"></div>
-<script src="game.js?v=36"></script>
+<script src="game.js?v=37"></script>
 </body>
 </html>

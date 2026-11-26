@@ -913,6 +913,94 @@ ok('T2: entry says what the tour is', src.indexOf('复习巡演 · 三关（约 
 ok('T2: empty state explains how to unlock', src.indexOf('先在地图里任选一间校完') !== -1);
 ok('T2: no coins or leaderboard added', src.indexOf('coin') === -1 && src.indexOf('leaderboard') === -1);
 
+/* ---------- 30. 我的校记档案 ---------- */
+const emptyA = m.archiveFacts({ cleared: {}, mastery: {}, evidence: {}, tourHistory: [] });
+ok('A2: empty archive is flagged', emptyA.empty === true && emptyA.total === 0);
+ok('A2: empty archive has no history', emptyA.history.length === 0);
+
+const archState = { cleared: {}, mastery: {}, evidence: {}, tourHistory: [] };
+playable.forEach((r) => { archState.cleared[r.id] = true; });
+archState.mastery[playable[0].id] = 'understand';
+archState.mastery[playable[1].id] = 'proficient';
+archState.mastery[playable[2].id] = 'transfer';
+archState.evidence[playable[0].id] = { hints: 2, faults: 1 };
+const arc = m.archiveFacts(archState);
+ok('A2: all 19 cleared rooms are listed', arc.total === 19 && arc.rows.length === 19);
+ok('A2: rooms are grouped by mastery',
+  arc.counts.understand === 1 && arc.counts.proficient === 1 && arc.counts.transfer === 1 && arc.counts.none === 16);
+ok('A2: missing evidence is not invented', arc.rows.find((r) => r.id === playable[1].id).hints === null);
+ok('A2: recorded evidence is shown', arc.rows.find((r) => r.id === playable[0].id).hints === 2);
+ok('A2: migration flag follows mastery', arc.rows.find((r) => r.id === playable[2].id).migrated === true);
+ok('A2: missing summary says 未记录', arc.rows.some((r) => r.summary === '未记录'));
+
+ok('A2: no history is not faked', m.archiveFacts({ cleared: {}, tourHistory: [] }).history.length === 0);
+const withHist = { cleared: {}, tourHistory: [
+  { at: 1, outcome: 'done', rooms: [{ title: 'A', slot: 'weak', variant: false }], hints: 1, predicted: 1, hits: 1, moved: 1 },
+  { at: 2, outcome: 'left', rooms: [{ title: 'B', slot: 'cross', variant: true }], hints: 0, predicted: 0, hits: 0, moved: 0 }
+] };
+ok('A2: history keeps the latest three', (function () {
+  const four = { cleared: {}, tourHistory: [1, 2, 3, 4].map((i) => ({ at: i, outcome: 'done', rooms: [], hints: 0, predicted: 0, hits: 0, moved: 0 })) };
+  return m.archiveFacts(four).history.length === 3;
+})());
+ok('A2: history marks a mid-way exit', m.archiveFacts(withHist).history.some((h) => h.outcome === '中途退出'));
+ok('A2: history names the slot and variant', (function () {
+  const h = m.archiveFacts(withHist).history[0].rooms[0];
+  return h.slot === '跨域项' && h.variant === true;
+})());
+
+ok('A2: filters exist for district and mastery', src.indexOf("'按城区筛选'") !== -1 && src.indexOf("'按掌握层级筛选'") !== -1);
+ok('A2: archive is reachable from the map', src.indexOf("mkBtn('我的校记档案'") !== -1);
+ok('A2: archive is reachable from the ending', src.indexOf("endActs.appendChild(mkBtn('我的校记档案'") !== -1);
+ok('A2: retrain keeps the main line intact', src.indexOf('reviewStart(row.id, mode)') !== -1 && src.indexOf('state.cleared[row.id] = false') === -1);
+ok('A2: archive is not forced on the player', src.indexOf('function showArchive()') !== -1 && src.indexOf('renderMap();\n}') !== -1);
+ok('A2: partial data says 未记录', src.indexOf('hints == null ? \'未记录\'') !== -1);
+ok('A2: tour history is saved', src.indexOf('tourHistory: state.tourHistory') !== -1);
+
+/* ---------- 31. 可行动的复习计划 ---------- */
+ok('P: plan is empty without data', m.reviewPlan({ cleared: {}, mastery: {}, evidence: {}, tourHistory: [] }).length === 0);
+
+const planState = { cleared: {}, mastery: {}, evidence: {}, tourHistory: [] };
+playable.slice(0, 3).forEach((r) => { planState.cleared[r.id] = true; });
+planState.mastery[playable[0].id] = 'transfer';
+planState.mastery[playable[1].id] = 'proficient';
+planState.mastery[playable[2].id] = 'understand';
+planState.evidence[playable[2].id] = { hints: 4, faults: 0 };
+const plan3 = m.reviewPlan(planState);
+ok('P: plan caps at three items', plan3.length === 3);
+ok('P: lowest mastery comes first', plan3[0].mastery !== 'transfer' && plan3[0].mastery !== 'proficient');
+ok('P: understand item explains the hint count', /4 次提示/.test(plan3[0].reason), plan3[0].reason);
+ok('P: actions are executable, not status names', /开始原题|少提示再练|挑战迁移题|复听|再练一次/.test(plan3[0].action));
+ok('P: proficient rooms are pointed at a variant', (function () {
+  const item = plan3.find((i) => i.mastery === 'proficient');
+  return !item || (item.mode === 'variant') === !!playable.find((r) => r.id === item.id && m.variantSupports(r));
+})());
+ok('P: every mastery has a next step', ['none', 'understand', 'proficient', 'transfer'].every((k) => !!m.NEXT_STEP_TEXT[k]));
+ok('P: section headers carry the next step', src.indexOf('+ NEXT_STEP_TEXT[pair[0]]') !== -1);
+ok('P: skipping is recorded and does not touch the main line', src.indexOf("outcome: 'skipped'") !== -1);
+ok('P: leaving a review is recorded', src.indexOf("reviewFinish('left')") !== -1);
+ok('P: finishing a review is recorded on pass', src.indexOf("reviewFinish('done')") !== -1);
+ok('P: review history is capped', src.indexOf('state.reviewHistory = (state.reviewHistory || []).concat([rec]).slice(-10)') !== -1);
+ok('P: archive offers resuming an unfinished tour', src.indexOf('继续上次巡演') !== -1 && src.indexOf('未完成') !== -1);
+ok('P: plan items show original or variant label', src.indexOf("item.mode === 'variant' ? '迁移题' : '原题'") !== -1);
+ok('P: no notifications or streaks', src.indexOf('streak') === -1 && src.indexOf('notification') === -1);
+
+/* ---------- 32. 旧存档与音频回退 ---------- */
+ok('L: legacy save without reviewHistory still loads',
+  src.indexOf('if (Array.isArray(d.reviewHistory)) state.reviewHistory = d.reviewHistory.slice(-10);') !== -1);
+ok('L: legacy save without review state still loads',
+  src.indexOf("if (d.review && typeof d.review === 'object') state.review = d.review;") !== -1);
+ok('L: review state defaults are safe', src.indexOf('review: null,\n  reviewHistory: []') !== -1);
+ok('L: archive works with no review history',
+  m.archiveFacts({ cleared: {}, tourHistory: [] }).history.length === 0);
+ok('L: plan works with no evidence',
+  m.reviewPlan({ cleared: {}, mastery: {}, evidence: {} }).length === 0);
+
+const planSrc = src.slice(src.indexOf('function reviewPlan'), src.indexOf('function reviewHistoryPush'));
+ok('A3: plan never touches audio', planSrc.indexOf('ensureAudio') === -1 && planSrc.indexOf('AudioContext') === -1);
+ok('A3: plan is pure data, no DOM', planSrc.indexOf('document.') === -1);
+ok('A3: review entry does not auto-play', src.indexOf('function reviewStart') !== -1 &&
+  src.slice(src.indexOf('function reviewStart'), src.indexOf('function reviewFinish')).indexOf('ensureAudio') === -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
