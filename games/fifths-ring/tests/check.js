@@ -984,6 +984,23 @@ ok('P: archive offers resuming an unfinished tour', src.indexOf('继续上次巡
 ok('P: plan items show original or variant label', src.indexOf("item.mode === 'variant' ? '迁移题' : '原题'") !== -1);
 ok('P: no notifications or streaks', src.indexOf('streak') === -1 && src.indexOf('notification') === -1);
 
+/* ---------- 32. 旧存档与音频回退 ---------- */
+ok('L: legacy save without reviewHistory still loads',
+  src.indexOf('if (Array.isArray(d.reviewHistory)) state.reviewHistory = d.reviewHistory.slice(-10);') !== -1);
+ok('L: legacy save without review state still loads',
+  src.indexOf("if (d.review && typeof d.review === 'object') state.review = d.review;") !== -1);
+ok('L: review state defaults are safe', src.indexOf('review: null,\n  reviewHistory: []') !== -1);
+ok('L: archive works with no review history',
+  m.archiveFacts({ cleared: {}, tourHistory: [] }).history.length === 0);
+ok('L: plan works with no evidence',
+  m.reviewPlan({ cleared: {}, mastery: {}, evidence: {} }).length === 0);
+
+const planSrc = src.slice(src.indexOf('function reviewPlan'), src.indexOf('function reviewHistoryPush'));
+ok('A3: plan never touches audio', planSrc.indexOf('ensureAudio') === -1 && planSrc.indexOf('AudioContext') === -1);
+ok('A3: plan is pure data, no DOM', planSrc.indexOf('document.') === -1);
+ok('A3: review entry does not auto-play', src.indexOf('function reviewStart') !== -1 &&
+  src.slice(src.indexOf('function reviewStart'), src.indexOf('function reviewFinish')).indexOf('ensureAudio') === -1);
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
