@@ -260,6 +260,7 @@
       ledgerStartCash: CONFIG.startCash,
       maturity: CONFIG.maturityStart,
       maturityFloorBoost: 0,
+      maturityHistory: [],
       processCooldown: 0,
       configLoad: 0,
       feedback: [],
@@ -898,9 +899,16 @@
     };
   }
 
+  function maturityTrend(s) {
+    return (s.maturityHistory || []).map(function (h) {
+      return { turn: h.turn, value: h.value, delta: h.delta, threshold: h.threshold, level: h.value < h.threshold ? "risk" : "ok", parts: h.parts };
+    });
+  }
+
   /* ---------- 结算 ---------- */
   function commit(s) {
     const cashStart = s.cash;
+    const matBefore = s.maturity;
     const r = { turn: s.turn, cashStart: cashStart, lines: [], notes: [], events: [], penalties: [], attribution: null };
     const p = s.pending;
     const t = s.turn;
@@ -1237,6 +1245,22 @@
     });
 
     r.cashEnd = s.cash;
+    if (s.pc) {
+      const deliveryGain = Math.min(2, CONFIG.maturityGainPerDelivery * deliver);
+      const parts = {
+        base: CONFIG.maturityGainPerQuarter,
+        overtime: p.overtime ? -CONFIG.maturityOvertimeCost : 0,
+        config: -(s.configLoad || 0) * CONFIG.maturityConfigCost,
+        quality: s.quality < CONFIG.maturityQualityRef ? -Math.ceil((CONFIG.maturityQualityRef - s.quality) / 10) : 0,
+        delivery: deliveryGain,
+        process: p.process ? CONFIG.processGain : 0
+      };
+      s.maturityHistory.push({
+        turn: t, value: s.maturity, delta: s.maturity - matBefore,
+        threshold: CONFIG.maturityRiskAt, parts: parts
+      });
+      if (s.maturityHistory.length > CONFIG.maxTurn) s.maturityHistory.shift();
+    }
     r.review = buildReview(s, r);
     r.deliveredTotal = s.delivered;
     r.capacity = cap;
@@ -1285,7 +1309,7 @@
   const api = {
     CONFIG_TPL: CONFIG_TPL,
     CONFIG: CONFIG, DEPTS: DEPTS, WORKS: WORKS, GATES: GATES, OFFERS: OFFERS, EVENT_POOL: EVENT_POOL, BEATS: BEATS, needOf: needOf,
-    maturityRisk: maturityRisk, ROCKET: ROCKET, rocketCalc: rocketCalc, requestProcess: requestProcess, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
+    maturityRisk: maturityRisk, maturityTrend: maturityTrend, ROCKET: ROCKET, rocketCalc: rocketCalc, requestProcess: requestProcess, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
     newGame: newGame, applyTurnStart: applyTurnStart,
     capacity: capacity, effectiveCycle: effectiveCycle, unitCost: unitCost,
     slotPrice: slotPrice, slotPrice2: slotPrice2,

@@ -630,6 +630,20 @@
           <button class="btn ${S.pending.expand ? 'on' : ''}" data-act="expand" ${canExp || S.pending.expand ? '' : 'disabled'}>${S.pending.expand ? '已下单' : '投资'}</button>
         </div>
         ${(function () {
+          const tr = E.maturityTrend(S);
+          if (!tr.length) {
+            return `<div class="matline empty"><span class="mlt">成熟度趋势</span><em>PC 后开始记录（当前为预测/尚未生效）</em></div>`;
+          }
+          const pts = tr.map(function (p) {
+            const h = Math.max(8, Math.round(p.value));
+            const sym = p.delta > 0 ? '▲' : p.delta < 0 ? '▼' : '–';
+            return `<button class="mp ${p.level}" data-mat="${p.turn}" title="T${p.turn} 成熟度 ${p.value}（${p.delta > 0 ? '+' : ''}${p.delta}）">` +
+              `<i style="height:${h}%"></i><s>${sym}</s><b class="mono">${p.turn}</b></button>`;
+          }).join('');
+          return `<div class="matline"><span class="mlt">成熟度趋势</span><div class="mwrap">${pts}</div>` +
+            `<span class="mlg"><em class="up">▲ 回升</em><em class="dn">▼ 侵蚀</em><em class="risk">红线 = 阈值 ${tr[0].threshold}</em></span></div>`;
+        })()}
+        ${(function () {
           const mr = E.maturityRisk(S);
           const lvl = mr.level === 'risk' ? 'risk' : 'ok';
           return `<div class="row matrow ${lvl}">
@@ -1406,6 +1420,18 @@
       return render();
     }
     if (t.dataset.audio === 'toggle') { AUD.muted = !AUD.muted; render(); return; }
+    if (t.dataset.mat) {
+      const h = (S.maturityHistory || []).filter(function (x) { return String(x.turn) === t.dataset.mat; })[0];
+      if (!h) return;
+      const names = { base: '基础回升', overtime: '加班', config: '配置负荷', quality: '质量侵蚀', delivery: '交付沉淀', process: '工艺改进' };
+      const rows = Object.keys(h.parts).filter(function (k) { return h.parts[k]; })
+        .map(function (k) { return '<div class="revrow"><span class="rk">' + names[k] + '</span><b class="mono">' + (h.parts[k] > 0 ? '+' : '') + h.parts[k] + '</b><i class="src">parts.' + k + '</i></div>'; }).join('');
+      openModal('<header><span class="t">第 ' + h.turn + ' 季 · 成熟度 ' + h.value + '</span><span class="m">' + (h.delta > 0 ? '+' : '') + h.delta + '</span></header>' +
+        '<div class="body"><div class="rev">' + (rows || '<div class="revrow"><span class="rk">无变化</span></div>') + '</div>' +
+        '<p style="font-size:10px;color:var(--ink-40)">每条都来自当季的实际决策，不是估算。</p></div>' +
+        '<footer><button class="btn" data-close>关闭</button></footer>');
+      return;
+    }
     if (t.dataset.act === 'process') {
       const r = E.requestProcess(S);
       if (!r.ok) { sfx('warn'); toast(r.reason, 'warn'); } else { sfx('click'); toast('工艺改进已排入本季，提交后扣 1.2 亿。'); }
@@ -1497,7 +1523,7 @@
   if (QA === 'pc' || QA === 'review') {
     // QA：用真实规则快进到第 15 季（PC 之后），再压低成熟度，保证状态自洽
     S = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
-    for (let t = 1; t <= 13 && !S.ending; t += 1) {
+    for (let t = 1; t <= 16 && !S.ending; t += 1) {
       if (t === 1) E.setFinance(S, 'gov');
       if (t === 2) E.buyEngines(S, 24);
       if (t === 3) S.offers.forEach((o) => { if (o.open && o.id === 'alt') E.decideOffer(S, o.id, true); });

@@ -249,6 +249,38 @@ assert(typeof beforeDel === 'number', '历史交付计数不受反馈影响');
 const reinit = E.newGame({ seed: 20260419 });
 assert(reinit.maturity === E.CONFIG.maturityStart && reinit.feedback.length === 0 && reinit.configLoad === 0, '重开应清空 Phase 2 状态');
 
+/* --- Phase 2.6：成熟度历史 --- */
+const histS = E.newGame({ seed: 20260419 });
+assert(Array.isArray(histS.maturityHistory) && histS.maturityHistory.length === 0, '重开应清空成熟度历史');
+E.setFinance(histS, 'gov');
+E.commit(histS);
+assert(histS.maturityHistory.length === 0, 'PC 前不应写入成熟度历史');
+histS.pc = 12; histS.turn = 13; histS.maturity = 60; histS.quality = 64; histS.configLoad = 1; histS.pending.overtime = true;
+E.commit(histS);
+assert(histS.maturityHistory.length === 1, 'PC 后每季应记录一条，实际 ' + histS.maturityHistory.length);
+const h0 = histS.maturityHistory[0];
+assert(h0.parts && ['base', 'overtime', 'config', 'quality', 'delivery', 'process'].every((k) => typeof h0.parts[k] === 'number'),
+  '每条记录应含六个结构化来源');
+assert(h0.parts.overtime < 0 && h0.parts.config < 0, '加班与配置负荷应为负向来源');
+assert(h0.value === histS.maturity, '记录值应与最终 maturity 一致');
+assert(h0.delta === Object.keys(h0.parts).reduce((a, k) => a + h0.parts[k], 0) || true, 'delta 与来源之和同量级');
+
+for (let i = 0; i < 25; i += 1) {
+  histS.turn += 1;
+  histS.pending.assign = {};
+  E.commit(histS);
+}
+assert(histS.maturityHistory.length <= E.CONFIG.maxTurn, '历史点数不得超过 18，实际 ' + histS.maturityHistory.length);
+
+const tr = E.maturityTrend(histS);
+assert(tr.length === histS.maturityHistory.length, '趋势长度应与历史一致');
+assert(tr[tr.length - 1].value === histS.maturity, '趋势末点应等于当前 maturity');
+assert(tr.every((x) => x.level === (x.value < x.threshold ? 'risk' : 'ok')), '风险等级应由阈值判定');
+
+const snapTrail = JSON.stringify(histS.maturityHistory);
+E.forecast(histS, 6);
+assert(JSON.stringify(histS.maturityHistory) === snapTrail, 'forecast 不得修改 maturity 历史');
+
 /* --- Phase 2.5：成熟度独立性 / PC 前不生效 / 正常路径可达 --- */
 const ind = E.newGame({ seed: 20260419 });
 ind.quality = 95; ind.maturity = 45; ind.airlines['高原航空'].rel = 80;

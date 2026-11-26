@@ -507,3 +507,18 @@ button.ti:hover{color:var(--ink);text-decoration:underline}
 .matrow.risk{border-left:3px solid var(--red);background:rgba(165,57,42,.05)}
 .matrow .matv{font-size:16px}
 .matrow .msrc{color:var(--ink-40);font-size:9px;letter-spacing:.02em;display:block;margin-top:2px}
+/* Phase 2.6 成熟度趋势 */
+.matline{display:flex;align-items:center;gap:8px;padding:6px 0 7px;border-bottom:1px dotted var(--ink-20);flex-wrap:wrap}
+.matline.empty{font-size:9.5px;color:var(--ink-40)}
+.matline .mlt{font-size:9px;letter-spacing:.12em;color:var(--ink-40);flex:0 0 auto}
+.matline .mwrap{display:flex;align-items:flex-end;gap:2px;overflow-x:auto;max-width:100%;flex:1 1 220px;height:40px}
+.matline .mp{flex:0 0 16px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;background:none;border:0;padding:0;cursor:pointer}
+.matline .mp i{display:block;width:100%;background:var(--ink-40);min-height:2px}
+.matline .mp.risk i{background:var(--red)}
+.matline .mp s{text-decoration:none;font-size:7px;line-height:1;color:var(--ink-40)}
+.matline .mp.risk s{color:var(--red)}
+.matline .mp b{font-size:6.5px;color:var(--ink-40);font-weight:400}
+.matline .mlg{display:flex;gap:8px;flex:0 0 auto}
+.matline .mlg em{font-style:normal;font-size:8.5px;color:var(--ink-40)}
+.matline .mlg .risk{color:var(--red)}
+@media (max-width:720px){ .matline .mlg{width:100%} }
