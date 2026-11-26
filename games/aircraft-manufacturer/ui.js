@@ -629,6 +629,16 @@
           <div class="lbl"><b>扩线投资 · 2.4 亿</b><span>${expandTxt}</span></div>
           <button class="btn ${S.pending.expand ? 'on' : ''}" data-act="expand" ${canExp || S.pending.expand ? '' : 'disabled'}>${S.pending.expand ? '已下单' : '投资'}</button>
         </div>
+        ${(function () {
+          const mr = E.maturityRisk(S);
+          const lvl = mr.level === 'risk' ? 'risk' : 'ok';
+          return `<div class="row matrow ${lvl}">
+            <div class="lbl"><b>量产成熟度 ${S.pc ? '' : '（PC 后生效）'}</b>
+            <span>${S.pc ? '当前 ' + S.maturity + ' → 预计 ' + mr.projected + '；影响产能，与质量、客户关系是三件独立的事。' : '现在不影响结算；PC 之后按加班、配置负荷、质量折算产能。'}</span>
+            <span class="msrc">依据：${mr.reasons.length ? mr.reasons.join(' · ') : '本季无侵蚀项'}</span></div>
+            <div class="mono matv">${S.pc ? S.maturity : '—'}</div>
+          </div>`;
+        })()}
         ${S.pc ? `<div class="row">
           <div class="lbl"><b>工艺改进 · ${C.processCost} 亿</b><span>成熟度 ${S.maturity} → ${Math.min(100, S.maturity + C.processGain)}${S.processCooldown > S.turn ? '（第 ' + S.processCooldown + ' 季后可再做）' : ''}。返工压力下降，产能回升。</span></div>
           <button class="btn ${S.pending.process ? 'on' : ''}" data-act="process" ${S.processCooldown > S.turn || S.cash < C.processCost ? 'disabled' : ''}>${S.pending.process ? '已下单' : '改进'}</button>
