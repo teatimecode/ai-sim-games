@@ -629,6 +629,10 @@
           <div class="lbl"><b>扩线投资 · 2.4 亿</b><span>${expandTxt}</span></div>
           <button class="btn ${S.pending.expand ? 'on' : ''}" data-act="expand" ${canExp || S.pending.expand ? '' : 'disabled'}>${S.pending.expand ? '已下单' : '投资'}</button>
         </div>
+        ${S.pc ? `<div class="row">
+          <div class="lbl"><b>工艺改进 · ${C.processCost} 亿</b><span>成熟度 ${S.maturity} → ${Math.min(100, S.maturity + C.processGain)}${S.processCooldown > S.turn ? '（第 ' + S.processCooldown + ' 季后可再做）' : ''}。返工压力下降，产能回升。</span></div>
+          <button class="btn ${S.pending.process ? 'on' : ''}" data-act="process" ${S.processCooldown > S.turn || S.cash < C.processCost ? 'disabled' : ''}>${S.pending.process ? '已下单' : '改进'}</button>
+        </div>` : `<div class="row"><div class="lbl"><b>工艺改进</b><span>拿到 PC、进入量产之后才能做。</span></div></div>`}
         <div class="row">
           <div class="lbl"><b>机位转租</b><span>把 3 个未开工机位整批转给远洋租机，立刻收 15% 预付款，折扣按 22%。</span></div>
           <button class="btn amber" data-act="release" ${E.canRelease(S) ? '' : 'disabled'}>转租 3 个</button>
@@ -675,8 +679,9 @@
       ${offers.length ? offers.map((o) => `
         <div class="offer">
           <div class="oh"><span class="who">${esc(o.cust)}<em>${esc(o.tag)}</em></span><span class="qty">${o.qty} 架</span></div>
-          <div class="meta mono">窗口 T${o.win[0]}–T${o.win[1]} · 折扣 ${Math.round(o.disc * 100)}%${S.discShift ? ' → 实付 ' + Math.round(Math.min(0.3, o.disc + S.discShift) * 100) + '%' : ''} · 定金 5%</div>
+          <div class="meta mono">${(E.CONFIG_TPL[o.config || 'std'] || {}).n || '标准通用'} · 窗口 T${o.win[0]}–T${o.win[1]} · 折扣 ${Math.round(o.disc * 100)}%${S.discShift ? ' → 实付 ' + Math.round(Math.min(0.3, o.disc + S.discShift) * 100) + '%' : ''} · 定金 5%</div>
           <div class="note">${esc(o.note)}</div>
+          ${o.config === 'hl' ? '<div class="cfgtag">配置：高频低成本 · 折扣更深、窗口前移一季、产线压力 +1</div>' : ''}
           ${offerFeasibility(o)}
           <div class="acts2">
             <button class="btn" data-offer="${o.id}" data-accept="1">接受</button>
@@ -1227,6 +1232,11 @@
         <div class="revnext"><b>下一季先做</b>${esc(r.review.next)}</div>` : ''}
         ${evs}
         ${lines || pens ? `<h3>现金明细</h3><div class="replist">${lines}${pens}</div>` : ''}
+        ${(function () {
+          const fb = (S.feedback || []).filter((x) => x.turn === r.turn);
+          if (!fb.length) return '';
+          return '<h3>交付反馈</h3>' + fb.map((x) => '<div class="fb"><b>' + esc(x.cust) + ' · 可靠性 ' + x.score + '</b>' + esc(x.text) + '</div>').join('');
+        })()}
         ${notes ? `<h3>本季发生了什么</h3>${notes}` : ''}
       </div>
       <footer><button class="btn" id="settleNext">${S.ending ? '看结项' : '进入第 ' + (r.turn + 1) + ' 季'}</button></footer>`);
@@ -1386,6 +1396,11 @@
       return render();
     }
     if (t.dataset.audio === 'toggle') { AUD.muted = !AUD.muted; render(); return; }
+    if (t.dataset.act === 'process') {
+      const r = E.requestProcess(S);
+      if (!r.ok) { sfx('warn'); toast(r.reason, 'warn'); } else { sfx('click'); toast('工艺改进已排入本季，提交后扣 1.2 亿。'); }
+      return render();
+    }
     if (t.dataset.act === 'ot') { E.toggleOvertime(S); return render(); }
     if (t.dataset.act === 'expand') {
       const res = E.requestExpand(S);
@@ -1468,6 +1483,34 @@
   if (QA === 'preview') {
     const b = document.querySelector('[data-preview]');
     if (b) b.click();
+  }
+  if (QA === 'pc' || QA === 'review') {
+    // QA：用真实规则快进到第 15 季（PC 之后），再压低成熟度，保证状态自洽
+    S = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+    for (let t = 1; t <= 13 && !S.ending; t += 1) {
+      if (t === 1) E.setFinance(S, 'gov');
+      if (t === 2) E.buyEngines(S, 24);
+      if (t === 3) S.offers.forEach((o) => { if (o.open && o.id === 'alt') E.decideOffer(S, o.id, true); });
+      if (t === 4) { E.requestExpand(S); E.requestHire(S, 'design'); E.requestHire(S, 'mfg'); }
+      if (t === 5) { E.requestHire(S, 'test'); E.requestHire(S, 'cert'); }
+      if (t === 6) E.buyEngines(S, 48);
+      if (t === 7) E.requestHire(S, 'flight');
+      if (t === 8) S.offers.forEach((o) => { if (o.open && o.id === 'blb') E.decideOffer(S, o.id, true); });
+      if (t === 10) S.offers.forEach((o) => { if (o.open && o.id === 'ocn') E.decideOffer(S, o.id, true); });
+      if (t === 11) E.buyEngines(S, 48);
+      E.autoAssign(S);
+      E.commit(S);
+    }
+    S.maturity = 44;
+    S.feedback = [{ turn: S.turn - 1, cust: '高原航空', score: 72, text: '首架运行三个月，客舱与系统投诉低于预期。' }];
+    ASSIST_UI.hidden = true;
+    tab = 'line';
+    render();
+    if (QA === 'review') {
+      const clone = E.clone(S);
+      const rep = E.commit(clone);
+      showSettlement(rep);
+    }
   }
   if (SKIP_INTRO) {
     E.setFinance(S, 'gov');

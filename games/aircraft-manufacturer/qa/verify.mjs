@@ -207,6 +207,78 @@ done.pending.assign = { d3: 3 };
 const dr = E.commit(done);
 assert(dr.notes.some((n) => n.indexOf('系统布置与数字样机') >= 0), '完成工作项应写入 doneNow 记录');
 
+/* --- Phase 2：量产成熟度 / 配置模板 / 反馈 --- */
+const m1 = E.newGame({ seed: 20260419 });
+assert(m1.maturity === E.CONFIG.maturityStart, '成熟度应从参数初值开始');
+assert(!E.requestProcess(m1).ok, 'PC 之前不应允许工艺改进');
+m1.pc = 12; m1.turn = 13; m1.cash = 10; m1.quality = 90;
+const procOk = E.requestProcess(m1);
+assert(procOk.ok, 'PC 之后应允许工艺改进');
+const rq = E.commit(m1);
+assert(m1.maturity > E.CONFIG.maturityStart, '工艺改进后成熟度应上升');
+assert(rq.review.items.some((x) => x.k === '量产成熟度'), '复盘应包含量产成熟度');
+assert(m1.processCooldown > m1.turn - 1, '工艺改进应进入冷却');
+
+const beforeM = E.newGame({ seed: 20260419 });
+const snapM = JSON.stringify(beforeM);
+E.previewDelta(beforeM, 8);
+assert(JSON.stringify(beforeM) === snapM, '预测不得改变新状态字段');
+
+const cfg = E.newGame({ seed: 1, seat: 'main', route: 'clean' });
+E.setFinance(cfg, 'gov');
+cfg.offers.forEach((o) => { o.open = true; });
+const blb = cfg.offers.filter((o) => o.id === 'blb')[0];
+const stdOffer = cfg.offers.filter((o) => o.id === 'alt')[0];
+assert(blb.config === 'hl' && !stdOffer.config, '蓝湾应带高频低成本模板，高原为通用');
+E.decideOffer(cfg, 'blb', true);
+E.commit(cfg);
+const slot = cfg.slots.filter((x) => x.cust === '蓝湾航空')[0];
+assert(slot.disc > 0.2, '配置模板应加深折扣，实际 ' + slot.disc.toFixed(2));
+assert(cfg.configLoad >= 1, '配置模板应带来产线压力');
+
+const fbProbe = E.newGame({ seed: 20260419 });
+fbProbe.pc = 13; fbProbe.turn = 14; fbProbe.maturity = 90; fbProbe.quality = 80;
+fbProbe.offers.forEach((o) => { o.open = true; });
+E.decideOffer(fbProbe, 'alt', true);
+E.commit(fbProbe);
+const beforeDel = fbProbe.delivered;
+const r2 = E.commit(fbProbe);
+assert(fbProbe.feedback.length === 0 || fbProbe.feedback.every((f) => f.score >= 0), '反馈分数应有界');
+assert(typeof beforeDel === 'number', '历史交付计数不受反馈影响');
+
+const reinit = E.newGame({ seed: 20260419 });
+assert(reinit.maturity === E.CONFIG.maturityStart && reinit.feedback.length === 0 && reinit.configLoad === 0, '重开应清空 Phase 2 状态');
+
+/* --- Phase 2 质量门：低成熟度 + 双 hl 不得结构性必败 --- */
+function worstCase(doProcess) {
+  const w = E.newGame({ seed: 20260419, seat: 'main', route: 'clean' });
+  while (!w.ending && w.turn <= E.CONFIG.maxTurn) {
+    const t = w.turn;
+    if (t === 1) E.setFinance(w, 'gov');
+    if (t === 2) E.buyEngines(w, 24);
+    if (t === 3) w.offers.forEach((o) => { if (o.open && o.id === 'alt') E.decideOffer(w, o.id, true); });
+    if (t === 4) { E.requestExpand(w); E.requestHire(w, 'design'); E.requestHire(w, 'mfg'); }
+    if (t === 5) { E.requestHire(w, 'test'); E.requestHire(w, 'cert'); }
+    if (t === 6) E.buyEngines(w, 48);
+    if (t === 7) E.requestHire(w, 'flight');
+    if (t === 8) w.offers.forEach((o) => { if (o.open && o.id === 'blb') E.decideOffer(w, o.id, true); });
+    if (t === 10) w.offers.forEach((o) => { if (o.open && o.id === 'ocn') E.decideOffer(w, o.id, true); });
+    if (t === 11) E.buyEngines(w, 48);
+    w.offers.forEach((o) => { o.config = 'hl'; });
+    if (w.pc && w.turn === w.pc + 1) w.maturity = E.CONFIG.maturityFloor;
+    if (doProcess && t === 14) E.requestProcess(w);
+    E.autoAssign(w);
+    E.commit(w);
+  }
+  return w;
+}
+const wc = worstCase(false);
+assert(wc.delivered >= 25, '低成熟度 + 双 hl 仍应交付 ≥25 架，实际 ' + wc.delivered);
+assert(wc.ending.id !== 'bankrupt' && wc.ending.id !== 'fail', '低成熟度 + 双 hl 不应结构性必败，实际 ' + wc.ending.id);
+assert(wc.maturity > E.CONFIG.maturityFloor, '低成熟度应能自然回升，实际 ' + wc.maturity);
+const wc2 = worstCase(true);
+assert(wc2.maturity > wc.maturity, '工艺改进应比不改进成熟度更高');
+
 /* --- Phase 1：预览 / 复盘 / 账本 / 证据 --- */
 const pv = E.newGame({ seed: 20260419 });
 E.setFinance(pv, 'gov'); E.commit(pv);

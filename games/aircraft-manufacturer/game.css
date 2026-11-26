@@ -485,12 +485,12 @@ button.ti:hover{color:var(--ink);text-decoration:underline}
 
 /* Phase 1：复盘 / 预览 / 账本 / 证据 */
 .rev{border:1px solid var(--ink-20);background:var(--panel2);margin:6px 0 8px}
-.revrow{display:grid;grid-template-columns:74px 1fr 12px;gap:4px 8px;align-items:baseline;padding:5px 9px;border-bottom:1px dotted var(--ink-20)}
+.revrow{display:grid;grid-template-columns:74px minmax(0,1fr) auto;gap:3px 8px;align-items:baseline;padding:5px 9px;border-bottom:1px dotted var(--ink-20)}
 .revrow:last-child{border-bottom:0}
 .revrow .rk{font-size:9px;letter-spacing:.1em;color:var(--ink-40)}
-.revrow b{font-size:11px;font-weight:500}
+.revrow b{font-size:11px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .revrow em{grid-column:2;font-style:normal;font-size:9.5px;color:var(--ink-55);line-height:1.5}
-.revrow .src{font-size:8px;color:var(--ink-40);font-family:var(--mono);text-align:right;white-space:nowrap}
+.revrow .src{font-size:8px;color:var(--ink-40);font-family:var(--mono);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px}
 .revnext{margin:6px 0 4px;padding:6px 9px;border-left:2px solid var(--amber);background:rgba(176,112,28,.06);font-size:10.5px;line-height:1.55}
 .revnext b{display:block;font-size:9px;letter-spacing:.12em;color:var(--amber);font-weight:400;margin-bottom:2px}
 .dnote{font-size:9.5px;color:var(--ink-40);margin:2px 0 8px}
@@ -499,3 +499,7 @@ button.ti:hover{color:var(--ink);text-decoration:underline}
 .ledrow{padding:3px 0;border-bottom:1px dotted var(--ink-20);display:flex;gap:8px}
 .ledrow .mono{color:var(--ink-40);flex:0 0 30px}
 .aev{margin-top:5px;font-size:8.5px;color:var(--ink-40);letter-spacing:.04em;font-family:var(--mono)}
+/* Phase 2 */
+.cfgtag{margin-top:5px;font-size:9px;padding:2px 6px;border-left:2px solid var(--amber);background:rgba(176,112,28,.06);color:var(--amber)}
+.fb{border-left:2px solid var(--teal);background:rgba(30,111,120,.05);padding:5px 8px;margin-bottom:5px;font-size:10px;line-height:1.55}
+.fb b{display:block;font-size:10px;margin-bottom:2px}
