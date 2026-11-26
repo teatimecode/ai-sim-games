@@ -31,13 +31,18 @@
     maturityFloor: 35,
     maturityReworkCap: 0.25,      // 最低成熟度时的产能损失比例
     maturityGainPerQuarter: 2,    // 每季自然回升
-    maturityGainPerDelivery: 1,   // 每交付一架的工艺沉淀
+    maturityGainPerDelivery: 0.5, // 每交付一架的工艺沉淀（单季最多 +2）
     maturityWarnAt: 60,           // 低于此值提前预警
     maturityIssueAt: 50,          // 低于此值开始出现交付检查不合格
     processCost: 1.2,             // 工艺改进花费
     processGain: 10,              // 工艺改进提升
     processCooldown: 2,           // 冷却季数
-    configLoadCap: 0.03,          // 每单配置对产能的额外压力
+    configLoadCap: 0.03,
+    maturityOvertimeCost: 5,      // 每季加班对成熟度的侵蚀
+    maturityConfigCost: 2,        // 每单位配置负荷的侵蚀
+    maturityQualityRef: 70,       // 质量低于此值开始侵蚀
+    maturityRiskAt: 60,           // 进入风险区的阈值
+          // 每单配置对产能的额外压力
 
     reworkFactor: 0.9
   };
@@ -254,6 +259,7 @@
       ledger: [],
       ledgerStartCash: CONFIG.startCash,
       maturity: CONFIG.maturityStart,
+      maturityFloorBoost: 0,
       processCooldown: 0,
       configLoad: 0,
       feedback: [],
@@ -804,7 +810,7 @@
       why: r.deliveredTotal ? '累计交付 ' + r.deliveredTotal + ' 架' : '尚未开始交付', src: 'slots / deliveredTotal' });
     if (s.pc) {
       items.push({ k: '量产成熟度', v: String(s.maturity),
-        why: s.maturity < CONFIG.maturityWarnAt ? '返工压力偏大，考虑工艺改进' : '产线状态稳定',
+        why: s.maturity < CONFIG.maturityRiskAt ? '已进入风险区：加班/配置负荷/质量在侵蚀产线' : s.maturity < CONFIG.maturityWarnAt ? '返工压力偏大，考虑工艺改进' : '产线状态稳定',
         src: 'maturity' });
     }
     const g = nextGate(s);
@@ -830,8 +836,9 @@
       const o = OFFERS.filter(function (x) { return x.id === id; })[0];
       if (o) acts.push('接单 ' + o.cust + ' ' + o.qty + ' 架');
     });
-    if (p.overtime) acts.push('加班提产');
+    if (p.overtime) acts.push('加班提产（成熟度 -' + CONFIG.maturityOvertimeCost + '）');
     if (p.process) acts.push('工艺改进');
+    if (s.pc && s.maturity < CONFIG.maturityRiskAt && (s.pending.process || true)) { /* 由外层记录 */ }
     if (storyPick && s.story) acts.push('抉择「' + s.story.title + '」');
     if (acts.length) s.ledger.push({ turn: t, acts: acts.slice(0, 3) });
   }
@@ -857,10 +864,37 @@
       seed: s.seed,
       best: best ? '第 ' + best.turn + ' 季（现金变动 ' + best.d.toFixed(2) + ' 亿）' : '—',
       costly: costly ? '第 ' + costly.turn + ' 季（现金变动 ' + costly.d.toFixed(2) + ' 亿）' : '—',
+      lateMaturity: (function () {
+        const hit = s.log.filter(function (r) { return s.pc && r.turn >= s.pc; });
+        return hit.length && s.maturity < CONFIG.maturityRiskAt ? '结项时仍在风险区（' + s.maturity + '）' : '未进入风险区';
+      })(),
       lateGate: Object.keys(gateTurn).length ? Object.keys(gateTurn).sort(function (a, b) { return gateTurn[b] - gateTurn[a]; })[0] + '（第 ' + gateTurn[Object.keys(gateTurn).sort(function (a, b) { return gateTurn[b] - gateTurn[a]; })[0]] + ' 季完成）' : '—',
       echoes: s.echoes.map(function (e) { return '第' + e.turn + '季「' + e.title + '」'; }),
       decisions: flat.slice(0, 8),
       events: Object.keys(s.schedule).map(function (k) { return 'T' + k + ' ' + (eventById(s.schedule[k]) || {}).title; })
+    };
+  }
+
+  /* Phase 2.5：成熟度风险投影（只读，PC 前也可用） */
+  function maturityRisk(s) {
+    const reasons = [];
+    let score = s.maturity != null ? s.maturity : CONFIG.maturityStart;
+    if (s.pending && s.pending.overtime) { score -= CONFIG.maturityOvertimeCost; reasons.push('本季加班 -' + CONFIG.maturityOvertimeCost); }
+    if (s.configLoad > 0) { score -= s.configLoad * CONFIG.maturityConfigCost; reasons.push('配置负荷 ' + s.configLoad + ' → -' + (s.configLoad * CONFIG.maturityConfigCost)); }
+    if (s.quality < CONFIG.maturityQualityRef) {
+      const d = Math.ceil((CONFIG.maturityQualityRef - s.quality) / 10);
+      score -= d; reasons.push('质量 ' + s.quality + ' 低于 ' + CONFIG.maturityQualityRef + ' → -' + d);
+    }
+    const projected = Math.max(CONFIG.maturityFloor, Math.min(100, score + CONFIG.maturityGainPerQuarter));
+    return {
+      current: s.maturity,
+      projected: projected,
+      level: projected < CONFIG.maturityRiskAt ? 'risk' : 'ok',
+      reasons: reasons,
+      active: !!s.pc,
+      fixCost: CONFIG.processCost,
+      fixGain: CONFIG.processGain,
+      cooldown: s.processCooldown || 0
     };
   }
 
@@ -940,6 +974,7 @@
     if (p.process) {
       s.cash -= CONFIG.processCost;
       s.maturity = Math.min(100, s.maturity + CONFIG.processGain);
+      s.maturityFloorBoost = Math.min(25, (s.maturityFloorBoost || 0) + 8);
       s.processCooldown = t + CONFIG.processCooldown;
       r.lines.push({ k: '工艺改进（成熟度 +' + CONFIG.processGain + '）', v: -CONFIG.processCost });
       r.notes.push('工艺改进落地：成熟度升到 ' + s.maturity + '，返工压力下降。');
@@ -1136,9 +1171,17 @@
         deliver -= 1;
         r.notes.push('交付检查不合格 1 架：成熟度 ' + s.maturity + ' 低于 ' + CONFIG.maturityIssueAt + '，返工后重检。');
       }
-      s.maturity = Math.min(100, s.maturity + CONFIG.maturityGainPerDelivery * deliver);
+      s.maturity = Math.min(100, s.maturity + Math.min(2, CONFIG.maturityGainPerDelivery * deliver));
     }
-    if (s.pc) s.maturity = Math.min(100, s.maturity + CONFIG.maturityGainPerQuarter);
+    if (s.pc) {
+      let delta = CONFIG.maturityGainPerQuarter;
+      if (p.overtime) delta -= CONFIG.maturityOvertimeCost;
+      delta -= (s.configLoad || 0) * CONFIG.maturityConfigCost;
+      if (s.quality < CONFIG.maturityQualityRef) delta -= Math.ceil((CONFIG.maturityQualityRef - s.quality) / 10);
+      const floorNow = Math.max(CONFIG.maturityFloor, s.maturityFloorBoost || 0);
+      s.maturity = Math.max(floorNow, Math.min(100, s.maturity + delta));
+      if (delta < 0) r.notes.push('产线压力侵蚀成熟度 ' + Math.abs(delta) + ' 点（加班/配置负荷/质量）。');
+    }
 
     if (deliver > 0) {
       s.engines -= deliver * 2;
@@ -1242,7 +1285,7 @@
   const api = {
     CONFIG_TPL: CONFIG_TPL,
     CONFIG: CONFIG, DEPTS: DEPTS, WORKS: WORKS, GATES: GATES, OFFERS: OFFERS, EVENT_POOL: EVENT_POOL, BEATS: BEATS, needOf: needOf,
-    ROCKET: ROCKET, rocketCalc: rocketCalc, requestProcess: requestProcess, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
+    maturityRisk: maturityRisk, ROCKET: ROCKET, rocketCalc: rocketCalc, requestProcess: requestProcess, assistEvidence: assistEvidence, rocketBreakEven: rocketBreakEven, previewDelta: previewDelta, buildReview: buildReview, ledgerSummary: ledgerSummary, clearPending: clearPending, ASSIST: ASSIST, nextAssistStep: nextAssistStep, assistReady: assistReady,
     newGame: newGame, applyTurnStart: applyTurnStart,
     capacity: capacity, effectiveCycle: effectiveCycle, unitCost: unitCost,
     slotPrice: slotPrice, slotPrice2: slotPrice2,

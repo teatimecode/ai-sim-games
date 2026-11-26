@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "runId": "main-path",
-  "buildHash": "db9cf497d6fcaa03",
+  "buildHash": "fe8f0d65f44934ac",
   "environment": "Pacture sandbox Chromium 1440x900 (testedRuntime), static http.server on 127.0.0.1:47655",
   "startedAt": "2026-11-27T09:00:00Z",
   "inputTrace": [
@@ -107,11 +107,10 @@
         "screenshot 1440x900"
       ],
       "state": {
-        "visual": "qa/evidence/22-review-1440.png",
+        "visual": "qa/evidence/19-phase2-1440.png",
         "extraVisuals": [
-          "qa/evidence/19-phase2-1440.png",
-          "qa/evidence/20-review-900.png",
-          "qa/evidence/23-review-430.png",
+          "qa/evidence/22-review-1440.png",
+          "qa/evidence/24-phase2-430.png",
           "qa/evidence/21-phase2-430.png"
         ],
         "fiveGatesVisible": true,
