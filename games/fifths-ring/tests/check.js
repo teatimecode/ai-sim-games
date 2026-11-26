@@ -951,10 +951,38 @@ ok('A2: history names the slot and variant', (function () {
 ok('A2: filters exist for district and mastery', src.indexOf("'按城区筛选'") !== -1 && src.indexOf("'按掌握层级筛选'") !== -1);
 ok('A2: archive is reachable from the map', src.indexOf("mkBtn('我的校记档案'") !== -1);
 ok('A2: archive is reachable from the ending', src.indexOf("endActs.appendChild(mkBtn('我的校记档案'") !== -1);
-ok('A2: retrain keeps the main line intact', src.indexOf('enterRoom(row.id)') !== -1 && src.indexOf('state.cleared[row.id] = false') === -1);
+ok('A2: retrain keeps the main line intact', src.indexOf('reviewStart(row.id, mode)') !== -1 && src.indexOf('state.cleared[row.id] = false') === -1);
 ok('A2: archive is not forced on the player', src.indexOf('function showArchive()') !== -1 && src.indexOf('renderMap();\n}') !== -1);
 ok('A2: partial data says 未记录', src.indexOf('hints == null ? \'未记录\'') !== -1);
 ok('A2: tour history is saved', src.indexOf('tourHistory: state.tourHistory') !== -1);
+
+/* ---------- 31. 可行动的复习计划 ---------- */
+ok('P: plan is empty without data', m.reviewPlan({ cleared: {}, mastery: {}, evidence: {}, tourHistory: [] }).length === 0);
+
+const planState = { cleared: {}, mastery: {}, evidence: {}, tourHistory: [] };
+playable.slice(0, 3).forEach((r) => { planState.cleared[r.id] = true; });
+planState.mastery[playable[0].id] = 'transfer';
+planState.mastery[playable[1].id] = 'proficient';
+planState.mastery[playable[2].id] = 'understand';
+planState.evidence[playable[2].id] = { hints: 4, faults: 0 };
+const plan3 = m.reviewPlan(planState);
+ok('P: plan caps at three items', plan3.length === 3);
+ok('P: lowest mastery comes first', plan3[0].mastery !== 'transfer' && plan3[0].mastery !== 'proficient');
+ok('P: understand item explains the hint count', /4 次提示/.test(plan3[0].reason), plan3[0].reason);
+ok('P: actions are executable, not status names', /开始原题|少提示再练|挑战迁移题|复听|再练一次/.test(plan3[0].action));
+ok('P: proficient rooms are pointed at a variant', (function () {
+  const item = plan3.find((i) => i.mastery === 'proficient');
+  return !item || (item.mode === 'variant') === !!playable.find((r) => r.id === item.id && m.variantSupports(r));
+})());
+ok('P: every mastery has a next step', ['none', 'understand', 'proficient', 'transfer'].every((k) => !!m.NEXT_STEP_TEXT[k]));
+ok('P: section headers carry the next step', src.indexOf('+ NEXT_STEP_TEXT[pair[0]]') !== -1);
+ok('P: skipping is recorded and does not touch the main line', src.indexOf("outcome: 'skipped'") !== -1);
+ok('P: leaving a review is recorded', src.indexOf("reviewFinish('left')") !== -1);
+ok('P: finishing a review is recorded on pass', src.indexOf("reviewFinish('done')") !== -1);
+ok('P: review history is capped', src.indexOf('state.reviewHistory = (state.reviewHistory || []).concat([rec]).slice(-10)') !== -1);
+ok('P: archive offers resuming an unfinished tour', src.indexOf('继续上次巡演') !== -1 && src.indexOf('未完成') !== -1);
+ok('P: plan items show original or variant label', src.indexOf("item.mode === 'variant' ? '迁移题' : '原题'") !== -1);
+ok('P: no notifications or streaks', src.indexOf('streak') === -1 && src.indexOf('notification') === -1);
 
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {

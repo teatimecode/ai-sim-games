@@ -2173,7 +2173,9 @@ var state = {
   tour: null,
   tourRuns: 0,
   variant: null,
-  tourHistory: []
+  tourHistory: [],
+  review: null,
+  reviewHistory: []
 };
 
 function totalSlots(level) {
@@ -2197,7 +2199,8 @@ function saveState() {
       hintTier: state.hintTier, records: state.records,
       compass: state.compass, rhythm: state.rhythm, warmupDone: state.warmupDone,
       mastery: state.mastery, evidence: state.evidence, tour: state.tour, tourRuns: state.tourRuns,
-      variant: state.variant, tourHistory: state.tourHistory
+      variant: state.variant, tourHistory: state.tourHistory,
+      review: state.review, reviewHistory: state.reviewHistory
     }));
   } catch (e) { /* 存档不可用不影响游玩 */ }
 }
@@ -2218,6 +2221,8 @@ function loadState() {
     if (Number.isInteger(d.tourRuns)) state.tourRuns = d.tourRuns;
     if (d.variant && typeof d.variant === 'object') state.variant = d.variant;
     if (Array.isArray(d.tourHistory)) state.tourHistory = d.tourHistory.slice(-3);
+    if (d.review && typeof d.review === 'object') state.review = d.review;
+    if (Array.isArray(d.reviewHistory)) state.reviewHistory = d.reviewHistory.slice(-10);
     if (Number.isInteger(d.avatarSeed)) state.avatarSeed = d.avatarSeed;
     if (d.avatarConfirmed) state.avatarConfirmed = true;
     if (d.district && districtById(d.district)) state.district = d.district;
@@ -2398,6 +2403,73 @@ function nextRecommended(s) {
 
 /* ================= 17. 我的校记档案 ================= */
 
+
+/* ================= 18. 可行动的复习计划 ================= */
+
+var NEXT_STEP_TEXT = {
+  none: '还没记过这一间：先按原题做一遍。',
+  understand: '上次用了提示：这次少点提示再做一遍。',
+  proficient: '已经稳了：换迁移题试一次。',
+  transfer: '迁移题也过了：复听一次，或自由复习。'
+};
+
+function reviewPlan(s) {
+  s = s || state;
+  var facts = archiveFacts(s);
+  var pool = facts.rows.map(function (row) {
+    var m = row.mastery || 'none';
+    var hints = row.hints == null ? 0 : row.hints;
+    var faults = row.faults == null ? 0 : row.faults;
+    var reason, action, mode;
+    if (m === 'none') {
+      reason = '这间还没有记录。';
+      action = '开始原题';
+      mode = 'original';
+    } else if (m === 'understand') {
+      reason = hints ? ('上次用了 ' + hints + ' 次提示' + (faults ? '、修正 ' + faults + ' 次' : '')) : '上次是带提示通过的';
+      action = '少提示再练';
+      mode = 'original';
+    } else if (m === 'proficient') {
+      reason = row.variantAvailable ? '还没走过迁移题' : '已经稳过，可换个玩法';
+      action = row.variantAvailable ? '挑战迁移题' : '再练一次';
+      mode = row.variantAvailable ? 'variant' : 'original';
+    } else {
+      reason = '迁移题已完成';
+      action = '复听或自由复习';
+      mode = 'original';
+    }
+    var weight = m === 'none' ? 0 : m === 'understand' ? 1 : m === 'proficient' ? 2 : 3;
+    return { id: row.id, title: row.title, district: row.district, mastery: m, masteryLabel: row.masteryLabel,
+      reason: reason, action: action, mode: mode, weight: weight, hints: hints, faults: faults };
+  });
+  pool.sort(function (a, b) { return a.weight - b.weight || b.hints - a.hints; });
+  return pool.slice(0, 3);
+}
+
+function reviewHistoryPush(rec) {
+  state.reviewHistory = (state.reviewHistory || []).concat([rec]).slice(-10);
+}
+
+function reviewStart(id, mode) {
+  state.review = { id: id, mode: mode || 'original', at: Date.now() };
+  if (mode === 'variant') state.variant = { id: id, shift: VARIANT_SHIFT };
+  else state.variant = null;
+  enterRoom(id);
+}
+
+function reviewFinish(outcome) {
+  var r = state.review;
+  if (!r) return;
+  reviewHistoryPush({ at: Date.now(), id: r.id, mode: r.mode, outcome: outcome });
+  state.review = null;
+}
+
+function reviewSkip(id) {
+  reviewHistoryPush({ at: Date.now(), id: id, mode: 'original', outcome: 'skipped' });
+  saveState();
+  renderArchive();
+}
+
 function archiveFacts(s) {
   s = s || state;
   var cleared = s.cleared || {};
@@ -2507,6 +2579,60 @@ function renderArchive() {
   bar.appendChild(ds); bar.appendChild(ms);
   body.appendChild(bar);
 
+  // 下一次复习：最多三项，带原因
+  var plan = reviewPlan(state);
+  var planSec = document.createElement('section');
+  planSec.className = 'archive-sec plan-sec';
+  var ph = document.createElement('h3');
+  ph.textContent = plan.length ? '下一次复习（' + plan.length + ' 项）' : '下一次复习';
+  planSec.appendChild(ph);
+  if (!plan.length) {
+    var pn = document.createElement('p');
+    pn.className = 'archive-note';
+    pn.textContent = '还没有可排的建议。先校完一间房，这里会按你的记录给出下一步。';
+    planSec.appendChild(pn);
+  } else {
+    plan.forEach(function (item) {
+      var row = document.createElement('article');
+      row.className = 'archive-card plan-card';
+      var t = document.createElement('div');
+      t.className = 'archive-card-title';
+      t.textContent = item.title + ' · ' + item.district + ' · ' + (item.mode === 'variant' ? '迁移题' : '原题');
+      row.appendChild(t);
+      var why = document.createElement('div');
+      why.className = 'archive-card-meta';
+      why.textContent = item.reason + ' → ' + item.action;
+      row.appendChild(why);
+      var acts = document.createElement('div');
+      acts.className = 'plan-actions';
+      acts.appendChild(mkBtn(item.action, 'btn btn-ink btn-mini', function () { reviewStart(item.id, item.mode); }));
+      acts.appendChild(mkBtn('这次不练', 'btn btn-quiet btn-mini', function () { reviewSkip(item.id); }));
+      row.appendChild(acts);
+      planSec.appendChild(row);
+    });
+  }
+  body.appendChild(planSec);
+
+  // 继续上次巡演
+  if (state.tour && state.tour.rooms) {
+    var resumeSec = document.createElement('section');
+    resumeSec.className = 'archive-sec';
+    var rh = document.createElement('h3');
+    rh.textContent = '未完成的巡演';
+    resumeSec.appendChild(rh);
+    var rr = document.createElement('article');
+    rr.className = 'archive-card';
+    var rt = document.createElement('div');
+    rt.className = 'archive-card-title';
+    rt.textContent = '上一轮巡演停在第 ' + Math.min((state.tour.index || 0) + 1, 3) + ' / 3 关 · 未完成';
+    rr.appendChild(rt);
+    var rbtn = mkBtn(state.tour.done ? '看总结' : '继续上次巡演', 'btn btn-ink btn-mini', resumeTour);
+    rbtn.id = 'archiveResumeTour';
+    rr.appendChild(rbtn);
+    resumeSec.appendChild(rr);
+    body.appendChild(resumeSec);
+  }
+
   var list = archiveFiltered(facts);
   if (!facts.empty && !list.length) {
     var none = document.createElement('div');
@@ -2521,7 +2647,7 @@ function renderArchive() {
     var sec = document.createElement('section');
     sec.className = 'archive-sec';
     var h = document.createElement('h3');
-    h.textContent = pair[1] + '（' + rows.length + '）';
+    h.textContent = pair[1] + '（' + rows.length + '）· ' + NEXT_STEP_TEXT[pair[0]];
     sec.appendChild(h);
     rows.forEach(function (row) {
       var card = document.createElement('article');
@@ -2541,9 +2667,9 @@ function renderArchive() {
       sum.className = 'archive-card-sum';
       sum.textContent = '我做的：' + row.summary;
       card.appendChild(sum);
-      var btn = mkBtn(row.variantAvailable ? '再练一遍（含变式）' : '再练一遍', 'btn btn-quiet btn-mini', function () {
-        state.archiveFilter = state.archiveFilter;
-        enterRoom(row.id);
+      var mode = (row.mastery === 'proficient' && row.variantAvailable) ? 'variant' : 'original';
+      var btn = mkBtn(mode === 'variant' ? '挑战迁移题' : '开始原题', 'btn btn-quiet btn-mini', function () {
+        reviewStart(row.id, mode);
       });
       card.appendChild(btn);
       sec.appendChild(card);
@@ -2584,6 +2710,7 @@ function renderArchive() {
 }
 
 function renderMap() {
+  if (state.review) reviewFinish('left');
   state.view = 'map';
   state.view = 'map';
   $('viewLanding').hidden = true;
@@ -6403,6 +6530,7 @@ function variantRoom(room) {
 }
 
 function passRoom(room) {
+  if (state.review && state.review.id === room.id) reviewFinish('done');
   if (state.tour && state.tour.active && state.tour.rooms.indexOf(room.id) !== -1) {
     state.cleared[room.id] = true;
     tourPass(room);
@@ -6729,6 +6857,7 @@ if (typeof module !== 'undefined' && module.exports) {
     SLICE_ROOMS: SLICE_ROOMS, PREDICT_DEFS: PREDICT_DEFS, predictFor: predictFor, predictActual: predictActual,
     makeFormStructureVariant: makeFormStructureVariant, formJudge: formJudge,
     archiveFacts: archiveFacts, archiveFiltered: archiveFiltered, recordTourHistory: recordTourHistory,
+    reviewPlan: reviewPlan, NEXT_STEP_TEXT: NEXT_STEP_TEXT, reviewStart: reviewStart, reviewSkip: reviewSkip, reviewFinish: reviewFinish,
     predictFeedback: predictFeedback, localCompareText: localCompareText, explainLevels: explainLevels,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,

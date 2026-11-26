@@ -731,3 +731,8 @@ body{
   .archive-card{padding:8px}
   .archive-filter select{flex:1 1 46%}
 }
+
+/* 复习计划 */
+.plan-sec .plan-card{border-left:2px solid #a3392a}
+.plan-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:520px){.plan-actions .btn{flex:1 1 46%}}
