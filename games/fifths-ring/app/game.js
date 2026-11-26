@@ -2460,14 +2460,100 @@ function reviewStart(id, mode) {
 function reviewFinish(outcome) {
   var r = state.review;
   if (!r) return;
-  reviewHistoryPush({ at: Date.now(), id: r.id, mode: r.mode, outcome: outcome });
+  var ev = (state.evidence || {})[r.id] || { hints: 0, faults: 0 };
+  var before = masteryOf(state, r.id);
+  reviewHistoryPush({
+    at: Date.now(), id: r.id, mode: r.mode, outcome: outcome,
+    hints: ev.hints || 0, faults: ev.faults || 0,
+    masteryBefore: before || null, masteryAfter: outcome === 'done' ? null : before || null
+  });
   state.review = null;
 }
 
 function reviewSkip(id) {
-  reviewHistoryPush({ at: Date.now(), id: id, mode: 'original', outcome: 'skipped' });
+  var ev = (state.evidence || {})[id] || { hints: 0, faults: 0 };
+  reviewHistoryPush({
+    at: Date.now(), id: id, mode: 'original', outcome: 'skipped',
+    hints: ev.hints || 0, faults: ev.faults || 0,
+    masteryBefore: masteryOf(state, id) || null, masteryAfter: masteryOf(state, id) || null
+  });
   saveState();
   renderArchive();
+}
+
+// 复习结果回写到房卡：只读，不改 cleared/seals
+function formatReviewDate(ts) {
+  if (!ts) return '';
+  var d = new Date(ts);
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日';
+}
+
+function reviewSummaryFor(id, s) {
+  s = s || state;
+  var hist = (s.reviewHistory || []).filter(function (r) { return r.id === id; });
+  var done = hist.filter(function (r) { return r.outcome === 'done'; });
+  var variantDone = done.filter(function (r) { return r.mode === 'variant'; });
+  var skipped = hist.filter(function (r) { return r.outcome === 'skipped'; });
+  var left = hist.filter(function (r) { return r.outcome === 'left'; });
+  var last = hist.length ? hist[hist.length - 1] : null;
+  return {
+    count: hist.length,
+    doneCount: done.length,
+    originalDone: done.filter(function (r) { return r.mode !== 'variant'; }).length,
+    variantDone: variantDone.length,
+    skippedCount: skipped.length,
+    leftCount: left.length,
+    last: last ? {
+      outcome: last.outcome,
+      mode: last.mode,
+      at: last.at,
+      date: formatReviewDate(last.at),
+      hints: last.hints == null ? null : last.hints,
+      zeroHint: last.hints === 0,
+      masteryBefore: last.masteryBefore || null,
+      masteryAfter: last.masteryAfter || null
+    } : null,
+    recent: hist.slice(-3).reverse().map(function (r) {
+      return {
+        outcome: r.outcome, mode: r.mode, date: formatReviewDate(r.at),
+        hints: r.hints == null ? null : r.hints,
+        masteryBefore: r.masteryBefore || null, masteryAfter: r.masteryAfter || null
+      };
+    })
+  };
+}
+
+function reviewSummaryLine(sum) {
+  if (!sum.count) return '尚未复习';
+  var last = sum.last;
+  var outcomeText = last.outcome === 'done' ? '通过' : last.outcome === 'skipped' ? '跳过' : '中途退出';
+  var modeText = last.mode === 'variant' ? '迁移题' : '原题';
+  var bits = ['复习 ' + sum.count + ' 次',
+    '原题通过 ' + sum.originalDone + ' · 迁移通过 ' + sum.variantDone];
+  if (sum.skippedCount) bits.push('跳过 ' + sum.skippedCount);
+  var lastBit = '最近：' + last.date + ' ' + modeText + ' ' + outcomeText;
+  if (last.outcome === 'done') {
+    lastBit += last.zeroHint ? '（零提示）' : ('（提示 ' + (last.hints == null ? '未记录' : last.hints + ' 次') + '）');
+  }
+  bits.push(lastBit);
+  if (last.masteryBefore && last.masteryAfter && last.masteryBefore !== last.masteryAfter) {
+    bits.push(MASTERY_LABEL[last.masteryBefore] + '→' + MASTERY_LABEL[last.masteryAfter]);
+  }
+  return bits.join(' · ');
+}
+
+// 总览统计：只基于 reviewHistory
+function reviewOverview(s) {
+  s = s || state;
+  var hist = s.reviewHistory || [];
+  var rooms = {};
+  hist.forEach(function (r) { rooms[r.id] = true; });
+  var done = hist.filter(function (r) { return r.outcome === 'done'; });
+  return {
+    roomsReviewed: Object.keys(rooms).length,
+    doneCount: done.length,
+    variantDone: done.filter(function (r) { return r.mode === 'variant'; }).length
+  };
 }
 
 function archiveFacts(s) {
@@ -2541,9 +2627,14 @@ function renderArchive() {
   $('viewArchive').hidden = false;
   $('btnBackMap').hidden = false;
   $('btnLanding').hidden = false;
-  $('archiveMeta').textContent = facts.empty
+  var ov = reviewOverview(state);
+  var statsLine = ov.doneCount
+    ? '已复习 ' + ov.roomsReviewed + ' 间 · 复习通过 ' + ov.doneCount + ' 次 · 迁移通过 ' + ov.variantDone + ' 次'
+    : '尚未复习';
+  $('archiveMeta').textContent = (facts.empty
     ? '还没有记录'
-    : '已完成 ' + facts.total + ' / 19 · 理解 ' + facts.counts.understand + ' · 熟练 ' + facts.counts.proficient + ' · 迁移 ' + facts.counts.transfer + (facts.counts.none ? ' · 未记录 ' + facts.counts.none : '');
+    : '已完成 ' + facts.total + ' / 19 · 理解 ' + facts.counts.understand + ' · 熟练 ' + facts.counts.proficient + ' · 迁移 ' + facts.counts.transfer + (facts.counts.none ? ' · 未记录 ' + facts.counts.none : '')) +
+    ' ｜ ' + statsLine;
 
   var body = $('archiveBody');
   body.innerHTML = '';
@@ -2667,6 +2758,41 @@ function renderArchive() {
       sum.className = 'archive-card-sum';
       sum.textContent = '我做的：' + row.summary;
       card.appendChild(sum);
+
+      var rs = reviewSummaryFor(row.id, state);
+      var rsum = document.createElement('div');
+      rsum.className = 'archive-card-review' + (rs.count ? '' : ' is-empty');
+      rsum.textContent = reviewSummaryLine(rs);
+      card.appendChild(rsum);
+
+      var openKey = row.id;
+      if (rs.count) {
+        var openBtn = mkBtn((state.archiveOpen && state.archiveOpen[openKey]) ? '收起复习记录' : '展开复习记录（最近 ' + Math.min(rs.count, 3) + ' 条）',
+          'btn btn-quiet btn-mini', (function (key) {
+            return function () {
+              state.archiveOpen = state.archiveOpen || {};
+              state.archiveOpen[key] = !state.archiveOpen[key];
+              renderArchive();
+            };
+          })(openKey));
+        openBtn.setAttribute('aria-expanded', (state.archiveOpen && state.archiveOpen[openKey]) ? 'true' : 'false');
+        card.appendChild(openBtn);
+        if (state.archiveOpen && state.archiveOpen[openKey]) {
+          var ul = document.createElement('ul');
+          ul.className = 'archive-review-list';
+          rs.recent.forEach(function (r) {
+            var li = document.createElement('li');
+            var oc = r.outcome === 'done' ? '通过' : r.outcome === 'skipped' ? '跳过' : '中途退出';
+            var mc = r.mode === 'variant' ? '迁移题' : '原题';
+            var extra = r.outcome === 'done' ? (r.hints === 0 ? '零提示' : '提示 ' + (r.hints == null ? '未记录' : r.hints + ' 次')) : '';
+            var mv = (r.masteryBefore && r.masteryAfter && r.masteryBefore !== r.masteryAfter)
+              ? ' · ' + MASTERY_LABEL[r.masteryBefore] + '→' + MASTERY_LABEL[r.masteryAfter] : '';
+            li.textContent = r.date + ' · ' + mc + ' · ' + oc + (extra ? ' · ' + extra : '') + mv;
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+        }
+      }
       var mode = (row.mastery === 'proficient' && row.variantAvailable) ? 'variant' : 'original';
       var btn = mkBtn(mode === 'variant' ? '挑战迁移题' : '开始原题', 'btn btn-quiet btn-mini', function () {
         reviewStart(row.id, mode);
@@ -6530,7 +6656,8 @@ function variantRoom(room) {
 }
 
 function passRoom(room) {
-  if (state.review && state.review.id === room.id) reviewFinish('done');
+  var wasReview = !!(state.review && state.review.id === room.id);
+  if (wasReview) reviewFinish('done');
   if (state.tour && state.tour.active && state.tour.rooms.indexOf(room.id) !== -1) {
     state.cleared[room.id] = true;
     tourPass(room);
@@ -6538,6 +6665,10 @@ function passRoom(room) {
     return;
   }
   state.cleared[room.id] = true;
+  if (wasReview) {
+    var recs = state.reviewHistory || [];
+    if (recs.length && recs[recs.length - 1].id === room.id) recs[recs.length - 1].masteryAfter = masteryOf(state, room.id) || recs[recs.length - 1].masteryBefore;
+  }
   state.lastMastery = { id: room.id, level: masteryAfterPass(masteryOf(state, room.id), evidenceOf(state, room.id), false) };
   if (masteryRank(state, room.id) < MASTERY_ORDER[state.lastMastery.level]) {
     state.mastery[room.id] = state.lastMastery.level;
@@ -6858,6 +6989,7 @@ if (typeof module !== 'undefined' && module.exports) {
     makeFormStructureVariant: makeFormStructureVariant, formJudge: formJudge,
     archiveFacts: archiveFacts, archiveFiltered: archiveFiltered, recordTourHistory: recordTourHistory,
     reviewPlan: reviewPlan, NEXT_STEP_TEXT: NEXT_STEP_TEXT, reviewStart: reviewStart, reviewSkip: reviewSkip, reviewFinish: reviewFinish,
+    reviewSummaryFor: reviewSummaryFor, reviewSummaryLine: reviewSummaryLine, reviewOverview: reviewOverview, formatReviewDate: formatReviewDate,
     predictFeedback: predictFeedback, localCompareText: localCompareText, explainLevels: explainLevels,
     firstDiffOf: firstDiffOf, playCompare: playCompare, playOwn: playOwn,
     pendingDistricts: pendingDistricts, droneDetuneCents: droneDetuneCents,

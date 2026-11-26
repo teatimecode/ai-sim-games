@@ -736,3 +736,10 @@ body{
 .plan-sec .plan-card{border-left:2px solid #a3392a}
 .plan-actions{display:flex;gap:8px;flex-wrap:wrap}
 @media (max-width:520px){.plan-actions .btn{flex:1 1 46%}}
+
+/* 复习结果回写 */
+.archive-card-review{font-size:11px;color:#5a4e42;margin:2px 0 6px}
+.archive-card-review.is-empty{color:#8a7a68}
+.archive-review-list{list-style:none;margin:6px 0 8px;padding:0;font-size:11px;line-height:1.8;color:#4a4036}
+.archive-review-list li{padding:2px 0;border-bottom:1px dashed #ddd0bd}
+.archive-review-list li:last-child{border-bottom:0}

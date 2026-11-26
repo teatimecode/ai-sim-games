@@ -1001,6 +1001,64 @@ ok('A3: plan is pure data, no DOM', planSrc.indexOf('document.') === -1);
 ok('A3: review entry does not auto-play', src.indexOf('function reviewStart') !== -1 &&
   src.slice(src.indexOf('function reviewStart'), src.indexOf('function reviewFinish')).indexOf('ensureAudio') === -1);
 
+/* ---------- 33. 复习结果回写 ---------- */
+ok('R2: no history reads as not reviewed', m.reviewSummaryLine(m.reviewSummaryFor('r-c-major', { reviewHistory: [] })) === '尚未复习');
+ok('R2: only skipped is not a completion', (function () {
+  const s = m.reviewSummaryFor('r-c-major', { reviewHistory: [{ id: 'r-c-major', mode: 'original', outcome: 'skipped', hints: 0 }] });
+  return s.count === 1 && s.doneCount === 0 && s.skippedCount === 1;
+})());
+ok('R2: original and variant completions are counted apart', (function () {
+  const s = m.reviewSummaryFor('r-c-major', { reviewHistory: [
+    { id: 'r-c-major', mode: 'original', outcome: 'done', hints: 2 },
+    { id: 'r-c-major', mode: 'variant', outcome: 'done', hints: 0 },
+    { id: 'r-c-major', mode: 'variant', outcome: 'done', hints: 1 }
+  ] });
+  return s.doneCount === 3 && s.originalDone === 1 && s.variantDone === 2;
+})());
+ok('R2: latest review drives the summary', (function () {
+  const s = m.reviewSummaryFor('r-a', { reviewHistory: [
+    { id: 'r-a', mode: 'original', outcome: 'done', hints: 5, at: 1 },
+    { id: 'r-a', mode: 'variant', outcome: 'done', hints: 0, at: 2 }
+  ] });
+  return s.last.mode === 'variant' && s.last.hints === 0 && s.last.zeroHint === true;
+})());
+ok('R2: summary line mentions counts and last result', (function () {
+  const line = m.reviewSummaryLine(m.reviewSummaryFor('r-a', { reviewHistory: [
+    { id: 'r-a', mode: 'variant', outcome: 'done', hints: 0, at: Date.now() }
+  ] }));
+  return /复习 1 次/.test(line) && /迁移通过 1/.test(line) && /零提示/.test(line);
+})());
+ok('R2: abandoned review is not a completion', (function () {
+  const s = m.reviewSummaryFor('r-a', { reviewHistory: [{ id: 'r-a', mode: 'original', outcome: 'left', hints: 3, at: 1 }] });
+  return s.leftCount === 1 && s.doneCount === 0 && /中途退出/.test(m.reviewSummaryLine(s));
+})());
+ok('R2: overview counts rooms and completions', (function () {
+  const ov = m.reviewOverview({ reviewHistory: [
+    { id: 'a', mode: 'original', outcome: 'done' }, { id: 'a', mode: 'variant', outcome: 'done' }, { id: 'b', mode: 'original', outcome: 'skipped' }
+  ] });
+  return ov.roomsReviewed === 2 && ov.doneCount === 2 && ov.variantDone === 1;
+})());
+ok('R2: empty overview is all zero', (function () {
+  const ov = m.reviewOverview({});
+  return ov.roomsReviewed === 0 && ov.doneCount === 0 && ov.variantDone === 0;
+})());
+ok('R2: review summary does not touch main line', (function () {
+  const seg = src.slice(src.indexOf('function reviewSummaryFor'), src.indexOf('function reviewSummaryLine'));
+  return seg.indexOf('cleared') === -1 && seg.indexOf('seals') === -1;
+})());
+ok('R2: summary is rendered on the room card', src.indexOf("rsum.className = 'archive-card-review'") !== -1);
+ok('R2: recent list is capped at three', (function () {
+  const s = m.reviewSummaryFor('r-a', { reviewHistory: [1, 2, 3, 4, 5].map((i) => ({ id: 'r-a', mode: 'original', outcome: 'done', hints: i, at: i })) });
+  return s.recent.length === 3;
+})());
+ok('R2: expandable records need a keyboard-reachable button', src.indexOf("openBtn.setAttribute('aria-expanded'") !== -1);
+ok('R2: variant entry stays available', src.indexOf("'挑战迁移题'") !== -1);
+ok('R2: legacy save without review fields still loads', src.indexOf('state.reviewHistory = d.reviewHistory.slice(-10)') !== -1);
+ok('R2: no audio dependency in review summaries', (function () {
+  const seg = src.slice(src.indexOf('function reviewSummaryFor'), src.indexOf('function reviewOverview'));
+  return seg.indexOf('ensureAudio') === -1 && seg.indexOf('document.') === -1;
+})());
+
 console.log('passed: ' + pass + '  failed: ' + fail);
 if (fail) {
   failures.slice(0, 20).forEach((f) => console.log('  FAIL ' + f));
